@@ -1,0 +1,9 @@
+{
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-empty": "error",
+    "no-unused-vars": "error"
+  }
+}

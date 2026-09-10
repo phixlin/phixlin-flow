@@ -2,5 +2,22 @@
   "name": "@phixlin/phixlin-flow",
   "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "oxlint .",
+    "test:smoke": "vitest run tests/smoke.spec.ts",
+    "check:all": "pnpm test && pnpm typecheck && pnpm lint && pnpm test:smoke"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.0",
+    "oxlint": "^1.82.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
 }

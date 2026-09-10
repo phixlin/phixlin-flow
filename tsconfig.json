@@ -5,8 +5,7 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noImplicitAny": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+    "declaration": true,
     "outDir": "dist"
   },
   "include": ["src", "tests"]
