@@ -1,0 +1,14 @@
+# 本地钩子只做秒级检查;全量归 CI。
+pre-commit:
+  jobs:
+    - name: lint (staged)
+      glob: '*.{ts,tsx,mjs}'
+      run: npx oxlint --fix {staged_files}
+      stage_fixed: true
+    - name: whitespace
+      run: git diff --cached --check
+    - name: decisions index
+      run: node scripts/verify-decisions.mjs
+pre-push:
+  jobs:
+    - run: pnpm typecheck
