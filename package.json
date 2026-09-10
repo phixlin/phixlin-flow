@@ -12,10 +12,12 @@
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint .",
     "test:smoke": "vitest run tests/smoke.spec.ts",
-    "check:all": "pnpm test && pnpm typecheck && pnpm lint && pnpm test:smoke"
+    "check:all": "pnpm test && pnpm typecheck && pnpm lint && pnpm test:smoke",
+    "postinstall": "lefthook install"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.0",
+    "lefthook": "^2.1.12",
     "oxlint": "^1.82.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
