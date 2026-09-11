@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/event-v1.schema.json",
+  "title": "phixlin-flow diagnostic event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "event_id", "sequence", "at", "change_id", "state_version", "kind", "operation_id", "execution_ref", "payload_digest", "artifact"],
+  "properties": {
+    "schema": { "const": "phixlin.event.v1" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "at": { "$ref": "#/$defs/timestamp" },
+    "change_id": { "type": "string", "minLength": 1 },
+    "state_version": { "type": "integer", "minimum": 0 },
+    "kind": {
+      "enum": [
+        "mutation-committed",
+        "operation-reserved",
+        "operation-dispatched",
+        "operation-result-collected",
+        "operation-reconciled",
+        "skill-recorded",
+        "transition",
+        "error"
+      ]
+    },
+    "operation_id": { "type": ["string", "null"] },
+    "execution_ref": { "type": ["string", "null"] },
+    "payload_digest": { "$ref": "#/$defs/digest" },
+    "artifact": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactRef" }]
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^artifacts/.+" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

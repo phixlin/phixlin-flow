@@ -1,0 +1,104 @@
+schema: phixlin.flow.v1
+change_id: m0-example
+title: Freeze the v1 protocol
+state_version: 0
+created_at: 2026-09-11T08:00:00Z
+updated_at: 2026-09-11T08:00:00Z
+workspace:
+  root: /workspace/example
+  repository: example
+  baseline:
+    path: artifacts/workspace-baseline.json
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 24
+  allowed_paths:
+    - src/
+    - tests/
+workflow:
+  name: standard
+  version: 1
+  workflow: phixlin-flow-v1
+  runtime: codex
+  digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  stages:
+    shape:
+      - name: local-shape
+        path: .agents/skills/local-shape/SKILL.md
+        digest: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+        resources:
+          - path: references/questions.md
+            sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+            bytes: 120
+        source_commit: null
+    build: []
+    verify:
+      - name: test-runner
+        path: vendor/openai-skills/test-runner/SKILL.md
+        digest: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        resources: []
+        source_commit: 0123456789abcdef0123456789abcdef01234567
+outer:
+  phase: shape
+  status: active
+  stage_visit: 1
+  iteration: 0
+inner:
+  state: ready
+  position:
+    action: skill
+    skill_index: 0
+    turn: 0
+    attempt: 0
+budget:
+  turns_used: 0
+  turn_limit: 20
+  execution_failures: 0
+  execution_failure_limit: 3
+  repairs_used: 0
+  repair_limit: 3
+  no_progress: 0
+  no_progress_limit: 3
+skills:
+  - invocation_id: shape-visit-1-skill-0
+    mode: planned
+    index: 0
+    name: local-shape
+    source_digest: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    observation: host-observed
+    status: pending
+    attempts: 0
+    input_digest: null
+    raw_output: null
+    artifacts: []
+    workspace_before: null
+    workspace_after: null
+    completed_by: null
+stage_context:
+  binding:
+    change_id: m0-example
+    stage_visit: 1
+    workflow_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    brief_revision: 1
+    spec_revision: null
+    candidate_id: null
+    input_digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  revision: 1
+  planned_completed: []
+  execution_records: []
+  stage_artifacts: []
+brief:
+  revision: 1
+  digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  artifact:
+    path: artifacts/brief-revision-1.md
+    sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    bytes: 180
+  confirmed: null
+shape: null
+candidate: null
+verification: null
+interaction: null
+blocker: null
+finalization:
+  state: pending
+history: []

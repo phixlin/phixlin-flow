@@ -355,7 +355,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ## 10. 实施计划与验收标准
 
-按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。所有任务当前均为待实施，本文没有宣称已有可运行实现。
+按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。M0 已开始实施，状态以本节的进度记录和机器证据为准；M1 及以后仍待实施。
 
 | 里程碑 | 依赖 | 预计工作日 | 发布门 |
 |---|---|---:|---|
@@ -445,6 +445,18 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - 两类 Skill 都留下宿主派发记录；缺失资源时失败且不推进。
 - 用户回答后可继续同一 Shape 轮次；Agent 不能以结果字段代替人工批准。
 - 对未验证能力列出阻塞项或明确降级方案，禁止把缺失能力标成已支持。
+
+#### M0 实施进度（2026-09-11）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M0.1 单文件状态 | 完成 | `schemas/flow-state-v1.schema.json`、四个 `fixtures/state/*.yaml`、契约测试 |
+| M0.2 CAS 协议 | 完成设计与 Linux spike | `docs/contracts/cas-v1.md`、`fixtures/cas/d01-d04.yaml`、`pnpm spike:cas` |
+| M0.3 Workflow Profile | 完成 | `schemas/workflow-profile-v1.schema.json`、快照生成器和契约测试 |
+| M0.4 CLI 与目录 | 完成契约冻结 | `docs/contracts/cli-v1.md`、事件与执行结果 Schema |
+| M0.5 Codex 能力 | 部分完成，阻塞 | `docs/evidence/m0/codex-capability-report.json` |
+
+已在 `codex-cli 0.150.1` 验证认证、JSONL、结构化结果、needs-user/answer 往返、自建 Skill、开源子目录 Skill 和缺失资源阻塞。当前宿主容器无法启动 Codex `workspace-write` sandbox，报 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`；因此 M0 发布门仍未通过，M1 不得将 Build 执行标为可用。Harness 必须在启动时显式 preflight 并阻塞，不能自动降级到 `danger-full-access`。
 
 ### M1：自有状态机与内层 Loop
 

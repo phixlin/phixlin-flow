@@ -1,0 +1,36 @@
+{
+  "schema": "phixlin.skill-dispatch-evidence.v1",
+  "records": [
+    {
+      "probe_execution_ref": "<redacted-skill-probe-execution>",
+      "dispatch_order": 0,
+      "mode": "planned",
+      "observation": "host-observed",
+      "skill": "local-resource-reader",
+      "source_digest": "cbe7e98dad9232bcd11e63b5c0418636d655e706b79142a0486714285f9a76e1",
+      "result": "completed",
+      "observed_resource": "LOCAL-RESOURCE-READ-OK"
+    },
+    {
+      "probe_execution_ref": "<redacted-skill-probe-execution>",
+      "dispatch_order": 1,
+      "mode": "planned",
+      "observation": "host-observed",
+      "skill": "cli-creator",
+      "source_digest": "24058eabf0aafce6def3fb937ac93cbe3fa341c653c658dc589edb77f73d6152",
+      "source_commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "result": "completed",
+      "observed_resource": "Codex CLI Patterns"
+    },
+    {
+      "probe_execution_ref": "<redacted-missing-resource-execution>",
+      "dispatch_order": 0,
+      "mode": "planned",
+      "observation": "host-observed",
+      "skill": "missing-resource",
+      "source_digest": "e61c7c3f796b5d968fd1499431dbdae86d844264fe4cccb14cbf86a25afdabaa",
+      "result": "blocked",
+      "reason": "references/required.txt is missing"
+    }
+  ]
+}

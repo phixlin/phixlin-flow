@@ -1,0 +1,18 @@
+export type ContractErrorCode =
+  | 'INVALID_STATE'
+  | 'INVALID_WORKFLOW_PROFILE'
+  | 'INVALID_EXECUTION_RESULT'
+  | 'INVALID_EVENT'
+  | 'INVALID_REDUCER_VECTORS'
+  | 'PLANNED_SKILL_MISSING'
+  | 'RESOURCE_DRIFT'
+
+export class ContractError extends Error {
+  constructor(
+    readonly code: ContractErrorCode,
+    readonly issues: string[],
+  ) {
+    super(`${code}: ${issues.join('; ')}`)
+    this.name = 'ContractError'
+  }
+}

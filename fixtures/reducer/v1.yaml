@@ -1,0 +1,310 @@
+schema: phixlin.reducer-vectors.v1
+cases:
+  - id: reserve-operation
+    requirement: Reserve writes the only in-flight operation before dispatch.
+    given:
+      fixture: state/initial.yaml
+      overrides: {}
+    event:
+      type: reserve-operation
+      payload:
+        operation_id: operation-1
+        execution_ref: execution-1
+        expected_version: 0
+    then:
+      outcome: commit
+      patch:
+        /inner/state: executing
+        /budget/turns_used: 1
+        /state_version: 1
+
+  - id: collect-bound-result
+    requirement: Only the result bound to the current operation enters evaluation.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: executing
+    event:
+      type: execution-result
+      payload:
+        operation_id: operation-1
+        result: artifacts/operation-1-result.json
+    then:
+      outcome: commit
+      patch:
+        /inner/state: evaluating
+        /inner/result/path: artifacts/operation-1-result.json
+
+  - id: reject-stale-result
+    requirement: A result for a consumed operation cannot mutate current state.
+    given:
+      fixture: state/build.yaml
+      overrides: {}
+    event:
+      type: execution-result
+      payload:
+        operation_id: operation-from-old-visit
+        result: artifacts/stale-result.json
+    then:
+      outcome: reject
+      error_code: STALE_RESULT
+
+  - id: result-continue
+    requirement: Continue preserves the current visit and selects its next action.
+    given:
+      fixture: state/build.yaml
+      overrides:
+        /inner/state: evaluating
+    event:
+      type: result-continue
+      payload:
+        operation_id: operation-1
+    then:
+      outcome: commit
+      patch:
+        /inner/state: ready
+        /outer/stage_visit: 2
+
+  - id: planned-skill-completed
+    requirement: Planned completion advances only the current Skill index.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: evaluating
+    event:
+      type: skill-completed
+      payload:
+        operation_id: operation-1
+        invocation_id: shape-visit-1-skill-0
+    then:
+      outcome: commit
+      patch:
+        /skills/0/status: completed
+        /inner/state: ready
+
+  - id: contextual-skill-observed
+    requirement: Contextual Skill evidence does not move the planned pointer.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: evaluating
+    event:
+      type: contextual-skill-observed
+      payload:
+        invocation_id: contextual-1
+        observation: host-observed
+    then:
+      outcome: commit
+      patch:
+        /skills/1/mode: contextual
+        /inner/position/skill_index: 0
+
+  - id: execution-needs-user
+    requirement: A question stores its binding and does not approve Shape.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: evaluating
+    event:
+      type: result-needs-user
+      payload:
+        interaction_id: question-1
+        questions:
+          - Which output format is required?
+    then:
+      outcome: commit
+      patch:
+        /outer/status: await-user
+        /inner/state: waiting-user
+        /shape: null
+
+  - id: user-answer
+    requirement: Answer resumes the interrupted action in the same stage visit.
+    given:
+      fixture: state/verify.yaml
+      overrides:
+        /interaction/kind: question
+    event:
+      type: user-answer
+      payload:
+        interaction_id: accept-candidate-1
+        answers:
+          - JSON
+    then:
+      outcome: commit
+      patch:
+        /outer/status: active
+        /inner/state: ready
+        /outer/stage_visit: 3
+
+  - id: result-stage-ready
+    requirement: Agent output requests readiness but cannot change the outer phase.
+    given:
+      fixture: state/build.yaml
+      overrides:
+        /inner/state: evaluating
+    event:
+      type: result-stage-ready
+      payload:
+        evidence:
+          - artifacts/build-handoff.json
+    then:
+      outcome: commit
+      patch:
+        /outer/phase: build
+        /inner/state: stage-ready
+
+  - id: brief-change-proposed
+    requirement: A requirement change invalidates candidate state and returns to Shape.
+    given:
+      fixture: state/verify.yaml
+      overrides:
+        /outer/status: active
+    event:
+      type: brief-change-proposed
+      payload:
+        reason: Acceptance A1 must change.
+    then:
+      outcome: commit
+      patch:
+        /outer/phase: shape
+        /candidate: null
+        /verification: null
+
+  - id: execution-lost
+    requirement: Unknown external execution enters reconciliation without a redispatch.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: executing
+    event:
+      type: execution-lost
+      payload:
+        operation_id: operation-1
+    then:
+      outcome: commit
+      patch:
+        /inner/state: reconciling
+
+  - id: execution-error-retry
+    requirement: A confirmed execution failure retries below the configured limit.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: executing
+        /budget/execution_failures: 1
+    event:
+      type: execution-error
+      payload:
+        operation_id: operation-1
+        confirmed_stopped: true
+    then:
+      outcome: commit
+      patch:
+        /inner/state: ready
+        /budget/execution_failures: 2
+
+  - id: execution-error-blocked
+    requirement: The third consecutive infrastructure failure blocks dispatch.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /inner/state: executing
+        /budget/execution_failures: 2
+    event:
+      type: execution-error
+      payload:
+        operation_id: operation-1
+        confirmed_stopped: true
+    then:
+      outcome: commit
+      patch:
+        /outer/status: blocked
+        /inner/state: blocked
+
+  - id: shape-transition
+    requirement: Confirmed Shape starts a fresh Build visit.
+    given:
+      fixture: state/initial.yaml
+      overrides:
+        /outer/status: await-user
+        /inner/state: waiting-user
+    event:
+      type: confirm-shape
+      payload:
+        subject_digest: "2222222222222222222222222222222222222222222222222222222222222222"
+    then:
+      outcome: commit
+      patch:
+        /outer/phase: build
+        /outer/stage_visit: 2
+        /inner/state: ready
+
+  - id: build-transition
+    requirement: A reviewed current candidate starts a fresh Verify visit.
+    given:
+      fixture: state/build.yaml
+      overrides:
+        /inner/state: stage-ready
+    event:
+      type: stage-transition
+      payload:
+        candidate_id: candidate-1
+    then:
+      outcome: commit
+      patch:
+        /outer/phase: verify
+        /outer/stage_visit: 3
+        /inner/state: ready
+
+  - id: reject-unconfirmed-result
+    requirement: An Agent stage-ready result cannot replace human result approval.
+    given:
+      fixture: state/verify.yaml
+      overrides: {}
+    event:
+      type: finalize
+      payload:
+        candidate_id: candidate-1
+    then:
+      outcome: reject
+      error_code: INVALID_ACTION
+
+  - id: accept-current-result
+    requirement: Human approval binds to the current candidate digest.
+    given:
+      fixture: state/verify.yaml
+      overrides: {}
+    event:
+      type: accept-result
+      payload:
+        candidate_id: candidate-1
+        candidate_digest: "1111111111111111111111111111111111111111111111111111111111111111"
+    then:
+      outcome: commit
+      patch:
+        /outer/status: active
+        /inner/state: ready
+        /inner/position/action: finalize
+
+  - id: finalize-completed
+    requirement: Finalize enters completed only after immutable archive evidence exists.
+    given:
+      fixture: state/completed.yaml
+      overrides:
+        /outer/phase: verify
+        /outer/status: active
+        /inner/state: executing
+        /finalization/state: prepared
+    event:
+      type: finalize
+      payload:
+        candidate_id: candidate-1
+        archive: artifacts/final-report.md
+    then:
+      outcome: commit
+      patch:
+        /outer/phase: completed
+        /outer/status: done
+        /inner/state: idle
+        /finalization/state: completed

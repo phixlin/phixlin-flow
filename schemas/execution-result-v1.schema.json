@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/execution-result-v1.schema.json",
+  "title": "phixlin-flow execution result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "binding", "kind", "summary", "artifacts", "questions", "proposal", "skill_invocations"],
+  "properties": {
+    "schema": { "type": "string", "const": "phixlin.execution-result.v1" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["change_id", "stage_visit", "input_digest"],
+      "properties": {
+        "change_id": { "type": "string", "minLength": 1 },
+        "stage_visit": { "type": "integer", "minimum": 1 },
+        "input_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "kind": { "type": "string", "enum": ["continue", "needs-user", "stage-ready", "blocked"] },
+    "summary": { "type": "string" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifactRef" }
+    },
+    "questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "proposal": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reason", "affected_acceptance_ids", "suggested_change"],
+          "properties": {
+            "reason": { "type": "string", "minLength": 1 },
+            "affected_acceptance_ids": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "suggested_change": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "skill_invocations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "observation", "status", "artifact"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "observation": { "type": "string", "enum": ["host-observed", "model-reported"] },
+          "status": { "type": "string", "enum": ["completed", "failed"] },
+          "artifact": {
+            "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactRef" }]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^artifacts/.+" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
