@@ -4,7 +4,7 @@
 
 ## 1. 范围与原则
 
-首期的管理对象是一个可实施编码需求（`change`）。一个 change 有唯一的 change-id、工作区、规格、计划和最终交付结果；一次 Agent 调用是 operation，一次进入某阶段的 loop 是 visit。MVP 不引入 run-id，也不需要兼容此前未实现的接口。控制器使用 Node.js ESM/mjs，Agent 使用 Codex。
+首期的管理对象是一个可实施编码需求（`change`）。一个 change 有唯一的 change-id、工作区、规格、所选 Workflow Profile 和最终交付结果；一次 Agent 调用是 operation，一次进入某阶段的 loop 是 visit。MVP 不引入 run-id，也不需要兼容此前未实现的接口。控制器使用 Node.js ESM/mjs，Agent 使用 Codex。
 
 确定性指给定主状态和已校验事件，得到唯一下一状态和下一动作；不指模型输出、工具执行结果或重新运行代码具有确定性。主状态之外允许存在日志和产物，但不允许存在第二套可独立推进流程的状态。
 
@@ -15,15 +15,18 @@ MVP 的管理目录位于目标代码库的变更目录中。change 不拥有独
 ```text
 <repository>/.phixlin/changes/<change-id>/
   flow-state.yaml          # 唯一可恢复控制面
-  plan.yaml                # 人编排输入，只在 start 时读取
   brief.md                 # 用户原始需求与澄清结果
   specs/                   # 本 change 的实现规格
   artifacts/               # 不可变输出、报告、候选快照
   events.jsonl             # 诊断事件，不参与推进
   knowledge.md             # 完成后的知识摘要
+
+<repository>/.phixlin/workflows/
+  standard.yaml            # 项目预设工作流
+  deep-shape.yaml          # 另一套项目预设工作流
 ```
 
-`change-id` 由用户创建并可读，贯穿命令、需求文件、状态、审批和归档。`workspace.root` 指向目标仓库根目录，change 只记录基线摘要、允许修改范围和实际 diff，不复制整个代码库。`operation_id` 唯一标识一次外部调用；`execution_ref` 标识宿主实际创建的 Agent 执行；`stage_visit` 标识一次进入 shape/build/verify 的访问；`attempt` 仅表示同一动作的重试。CLI 以 change-id 管理。
+`change-id` 由用户创建并可读，贯穿命令、需求文件、状态、审批和归档。项目可以维护多个 Workflow Profile，创建 change 时通过 `--workflow standard` 选择。Profile 定义属于项目，不随 change 复制和编辑；change 状态只保存 workflow 名称、版本、内容摘要及解析后的 planned Skill 快照，使已启动 change 不受项目配置随后修改影响。`workspace.root` 指向目标仓库根目录，change 只记录基线摘要、允许修改范围和实际 diff，不复制整个代码库。
 
 ## 3. 单文件状态
 
@@ -33,10 +36,10 @@ MVP 的管理目录位于目标代码库的变更目录中。change 不拥有独
 |---|---|
 | schema、change_id、state_version | 协议版本、需求 ID、从 0 开始的提交版本 |
 | workspace | 仓库根路径、仓库标识、初始基线摘要、允许修改范围；不隐式清理用户修改 |
-| plan | 启动时解析并冻结的阶段 Skill 数组、资源摘要与运行预算 |
+| workflow | 项目 Workflow Profile 的名称、版本、摘要和本 change 的解析快照 |
 | outer | 外层交付状态机的 phase、status、stage_visit、iteration |
 | inner | 当前阶段 Agent loop 的 state、position 和执行绑定 |
-| skills | 当前 visit 的顺序执行记录，包含位置、资源摘要、状态和输出引用 |
+| skills | 当前 visit 的 planned 与 contextual Skill 执行记录 |
 | budget | visit turn、执行失败、修复和停滞计数与上限 |
 | brief | brief.md 摘要、brief_revision、来源和确认记录 |
 | shape | 规格引用、spec_revision、验收项快照、测试命令和确认记录 |
@@ -55,7 +58,7 @@ MVP 的管理目录位于目标代码库的变更目录中。change 不拥有独
 
 1. outer.phase=completed 当且仅当 outer.status=done，且有当前候选的通过结果、人工批准和已完成归档。
 2. 最多一个当前 Operation；其阶段访问和输入摘要必须与当前动作匹配。
-3. skills 必须与冻结计划的当前阶段数组逐项一致；禁止追加或跳过。
+3. planned skills 必须与 workflow 快照的当前阶段数组逐项一致，禁止追加或跳过；contextual skills 不改变 planned 指针和退出守卫。
 4. Build 必须有当前规格确认；Verify 必须有当前规格下的候选及独立审查通过记录。
 5. verification、最终审批和归档都必须绑定同一 candidate_id、candidate_digest、spec_revision。
 6. outer.status 非 active 时不派发新的自动动作；允许核对/收取已经派发的结果。
@@ -100,7 +103,7 @@ type Action = 'skill' | 'agent-work' | 'capture-candidate'
   | 'review-candidate' | 'run-checks' | 'verify-candidate' | 'finalize';
 type ArtifactRef = { path: string; sha256: string; bytes: number };
 type Binding = {
-  change_id: string; stage_visit: number; plan_revision: number;
+  change_id: string; stage_visit: number; workflow_digest: string;
   brief_revision: number;
   spec_revision: number | null; candidate_id: string | null;
   input_digest: string;
@@ -124,18 +127,28 @@ type Lifecycle =
   | { state: 'waiting-user'; position: LoopPosition; interaction_id: string }
   | { state: 'blocked'; position: LoopPosition; blocker_id: string }
   | { state: 'stage-ready'; evidence: ArtifactRef[] };
-type SkillRecord = {
-  index: number; source_digest: string;
+type SkillExecutionRecord = {
+  invocation_id: string; mode: 'planned' | 'contextual';
+  index: number | null; name: string; source_digest: string;
+  observation: 'host-observed' | 'model-reported';
   status: 'pending' | 'running' | 'completed' | 'failed';
-  attempts: number; output: ArtifactRef | null;
+  attempts: number; input_digest: string | null;
+  raw_output: ArtifactRef | null; artifacts: ArtifactRef[];
+  workspace_before: string | null; workspace_after: string | null;
   completed_by: string | null;
+};
+type StageContext = {
+  binding: Binding; revision: number;
+  planned_completed: string[];
+  execution_records: string[];
+  stage_artifacts: ArtifactRef[];
 };
 type ChangeState = {
   schema: 'phixlin.flow.v1'; change_id: string; title: string;
   state_version: number; created_at: string; updated_at: string;
   workspace: { root: string; repository: string; baseline: ArtifactRef;
     allowed_paths: string[] };
-  plan: { revision: number; digest: string;
+  workflow: { name: string; version: number; digest: string;
     stages: Record<'shape'|'build'|'verify',
       {name: string; path: string; digest: string}[]> };
   outer: { phase: Phase; status: Gate; stage_visit: number; iteration: number };
@@ -144,7 +157,8 @@ type ChangeState = {
     execution_failures: number; execution_failure_limit: number;
     repairs_used: number; repair_limit: number;
     no_progress: number; no_progress_limit: number };
-  skills: SkillRecord[];
+  skills: SkillExecutionRecord[];
+  stage_context: StageContext;
   brief: { revision: number; digest: string; artifact: ArtifactRef;
     confirmed: Approval | null };
   shape: ShapeSnapshot | null;
@@ -204,7 +218,7 @@ type TransitionRecord = {
 };
 ```
 
-`Operation` 嵌入 inner 是唯一 in-flight 权威字段，不另设副本。Interaction/Blocker.resume 是恢复位置快照，只允许 ready、reconciling 或 stage-ready，不能保存 waiting-user/blocked 引用形成递归等待。人工批准绑定待批准对象摘要，不能仅绑定一个可变文件路径。规格发生改变时增加 spec_revision，保留历史，回 Shape；change-id 不变。MVP 在开始后禁止原地修改计划；需要调整时显式人工 replan，在同一 change 中增加 plan.revision 并回 Shape，废弃旧审批和候选有效性，不创建新的需求来表示重试。
+`Operation` 嵌入 inner 是唯一 in-flight 权威字段，不另设副本。Interaction/Blocker.resume 是恢复位置快照，只允许 ready、reconciling 或 stage-ready。人工批准绑定待批准对象摘要。规格发生改变时增加 spec_revision，保留历史，回 Shape；change-id 不变。项目 Workflow Profile 修改只影响之后启动的 change。已启动 change 如需切换 profile，执行显式 `switch-workflow`，重新解析快照并回 Shape，使旧审批和候选失效。
 
 turn、attempt 是当前动作定位；budget.turns_used 是当前 visit 消耗总量，二者不能替代。操作 ID、时间和 UUID 在事件进入 reducer 前由宿主生成，reducer 内不读时钟、不生成随机值、不访问文件系统。
 
@@ -226,7 +240,8 @@ outer.active 可以组合 ready/executing/evaluating/stage-ready；outer.paused 
 | reserve-operation | active/ready、预算内、无旧执行 | 扣预算、分配 operation，inner=executing |
 | execution-result | 匹配 operation 与 binding | inner=evaluating，持久化结果引用 |
 | result-continue | evaluating、结果合法 | 写产物，inner=ready，选择同阶段后继 action |
-| skill-completed | evaluating/action=skill | 标记当前项 completed，指针前移，进入下一 Skill 或阶段工作 |
+| skill-completed | evaluating/action=skill、输出和工件边界校验通过 | 保存 SkillExecutionRecord；planned 项 completed 并前移指针 |
+| contextual-skill-observed | Agent 工作期间由模型触发计划外 Skill | 追加 mode=contextual 的审计记录和工件；恢复原 position，不移动 planned 指针 |
 | result-needs-user | evaluating | 保存 interaction，inner=waiting-user、outer=await-user |
 | user-answer | 对应 interaction/binding | 保存回答，inner=ready 恢复原 action，outer=active |
 | result-stage-ready | evaluating、无未完成 Skill | inner=stage-ready，再由外层守卫消费 |
@@ -260,7 +275,28 @@ async function driveChange(changeId) {
 }
 ```
 
-makeInput 读取已确认规格、当前 Skill 指令、前项 Skill 输出、累计工作摘要、失败反馈及用户回答，不以历史聊天记录为必需输入。执行级结果统一是 `{kind, summary, artifacts, questions?, proposal?}`；kind 为 continue、needs-user、stage-ready、blocked。Skill 用 stage-ready 表示本次 Skill 工作完成，宿主把它解释为 skill-completed；基础 Agent 工作的 stage-ready 解释为阶段就绪请求。无 Skill 的 Build 直接从 ready/agent-work 开始。
+makeInput 读取已确认规格、当前 planned Skill 指令、前项 Skill 输出、累计工作摘要、失败反馈及用户回答，不以历史聊天记录为必需输入。执行级结果统一是 `{kind, summary, artifacts, questions?, proposal?, skill_invocations?}`；kind 为 continue、needs-user、stage-ready、blocked。planned Skill 用 stage-ready 表示本次编排动作完成；基础 Agent 工作的 stage-ready 表示阶段就绪请求。无 planned Skill 的 Build 直接从 ready/agent-work 开始。
+
+模型在 agent-work 或 planned Skill 执行内部可以按上下文调用 Workflow Profile 之外的 Skill。此类调用标记为 `contextual`：不要求固定顺序、不要求一定发生、不计入阶段退出条件，也不能修改 workflow 快照。若 runtime 提供可信 Skill 调用事件，Adapter 直接记录；若平台只返回模型声明，则记录为 `reported` 级别，不能冒充宿主确认。contextual Skill 的输出可以进入后续上下文和证据，但其失败默认按普通 Agent turn 处理，不阻断 planned Skill 完成，除非它导致当前 turn 整体失败或产物不满足阶段守卫。
+
+### 4.6 Skill 间确定性交接
+
+MVP 不在每两个业务 Skill 之间增加 LLM normalizer。Harness 用普通代码记录 `SkillExecutionRecord`，保存调用绑定、原始输出、工件引用和 workspace 前后摘要，不解释第三方 Skill 的语义。输出和工件边界校验成功后，planned Skill 即可标记 completed。
+
+```text
+planned Skill A
+  -> 保存 raw output、artifact refs、workspace digest
+  -> 原子提交 SkillExecutionRecord
+  -> 组装 Skill B 输入
+  -> planned Skill B
+  -> 阶段 Agent 汇总并生成阶段 Handoff
+```
+
+后续 Skill 的输入由确定性规则组装：包含当前 brief/spec、阶段目标、直接前驱的完整 raw output、此前执行记录和全部工件引用、当前 workspace diff，以及当前 Skill 的 SKILL.md。此前完整输出不重复注入；需要细节时由 Agent 按 artifact 引用读取。Harness 不从原始文本猜测 findings、decisions、constraints 或 conflicts，也不静默改写第三方 Skill 的结论。
+
+业务语义在阶段边界收口：Shape Agent 生成 Shape Handoff，Build Agent 生成 Builder Handoff，Verifier 生成 Verification Result。这些输出本就是阶段完成条件，可由对应 Schema 和守卫校验，不需要为每个 Skill 再调用一个模型。
+
+contextual Skill 使用同一种执行记录。host-observed 表示 runtime 提供了可信调用事件；model-reported 只表示 Agent 声明调用过，不作为 planned 完成证据。contextual 输出可以进入后续输入和阶段 Handoff，但不移动 planned 指针。将来只有真实第三方 Skill 无法通过原始输出和工件引用交接时，才为该 Skill 增加显式 adapter；MVP 不预建通用 adapter 或相关配置。
 
 模型内部工具循环属于 Codex adapter，Harness 不把每次读文件变成状态提交。Harness 的一个 turn 是一次有绑定输入和可验证输出的宿主调用；不同 turn 可创建新会话。Builder/Reviewer/Verifier 的会话和执行引用分离，阶段交接靠冻结工件。
 
@@ -282,7 +318,7 @@ makeInput 读取已确认规格、当前 Skill 指令、前项 Skill 输出、�
 
 可恢复错误：rename 前退出仍读旧状态；rename 后响应丢失时按 actionId 查询并去重。目录同步失败属于提交结果不确定，重新读主状态核对，不能直接重复动作。解析失败不自动回退旧备份，以免重复副作用。临时文件不能被恢复逻辑当成正式状态。
 
-状态锁只保护提交；另设每个运行的执行器锁，确保同一时刻只有一个调度进程。执行器退出不代表其子进程已终止：恢复前必须处理 in_flight，禁止直接再派发写代码动作。
+状态锁只保护提交；另设每个 change 的执行器锁，确保同一时刻只有一个调度进程。执行器退出不代表其子进程已终止：恢复前必须处理 in_flight，禁止直接再派发写代码动作。
 
 ## 6. 外部执行与中断恢复
 
@@ -309,7 +345,7 @@ makeInput 读取已确认规格、当前 Skill 指令、前项 Skill 输出、�
 
 | 当前条件 | 动作 | 守卫与结果 |
 |---|---|---|
-| 当前 visit 有待执行 Skill | run-skill | 按数组位置派发；完成后进入下一项，全部完成后 agent-work |
+| 当前 visit 有待执行 planned Skill | run-skill | 按数组位置派发；完成后进入下一项，全部完成后 agent-work |
 | shape、Skill 完成 | agent-work | 整理规格及验收项，stage-ready 后等待 confirm-shape |
 | shape、等待确认 | confirm-shape | 人工绑定规格摘要；冻结验收项，进入 Build 新 visit |
 | build、Skill 完成 | agent-work | 实现或修复；准备好后 capture-candidate |
@@ -320,7 +356,7 @@ makeInput 读取已确认规格、当前 Skill 指令、前项 Skill 输出、�
 | verify、全部通过 | accept-result | 等待人工批准当前候选，批准后 finalize |
 | verify、已批准 | finalize | 本地归档完成后进入 completed |
 
-任何 phase 的 needs-user 保存问题及原动作，回答只恢复原动作，不代替阶段审批。continue 不重复已完成 Skill，持续约束 Skill 内容继续附在阶段上下文中。Skill 的“调用完成”与阶段完成独立；TDD 等规则最终还需检查实现证据。
+任何 phase 的 needs-user 保存问题及原动作，回答只恢复原动作，不代替阶段审批。continue 不重复已完成 planned Skill，持续约束 Skill 内容继续附在阶段上下文中。Skill 的“调用完成”与阶段完成独立；TDD 等规则最终还需检查实现证据。contextual Skill 不改变 planned 顺序。
 
 审查失败留在 Build，候选和旧审查失效，回 agent-work，不重新执行同 visit 已完成 Skill；它消耗阶段 turn 预算。规格摘要改变则回 Shape 新 visit，废弃当前审批、候选和验证的有效性，旧引用保留到 history。
 
@@ -378,7 +414,7 @@ finalize 先在主状态保留归档 operation，再按候选绑定生成本地 
 |---|---|
 | VERSION_CONFLICT / LOCK_BUSY | 调用方刷新或稍后重试，不产生副作用 |
 | INVALID_STATE / UNSUPPORTED_SCHEMA | 停止执行，保留原文件供诊断 |
-| SKILL_MISSING / RESOURCE_DRIFT | blocked，修复资源或新建计划运行 |
+| PLANNED_SKILL_MISSING / RESOURCE_DRIFT | blocked，修复项目 workflow 或显式切换 workflow |
 | SPEC_DRIFT | 回 Shape，重新确认 |
 | CANDIDATE_DRIFT | 作废当前验证/审批，回 Build 捕获新候选 |
 | EXECUTION_UNKNOWN | blocked，核对外部结果，不自动重做 |
@@ -398,6 +434,7 @@ M0 必须产出可解析的完整初始/Build/Verify/Completed 状态 fixture、
 | D03 | 写文件、rename、回执前分别 kill | 主状态始终是完整旧版或新版，恢复不猜测副作用 |
 | D04 | reserve 后 kill、工具执行中 kill | 不启动第二个未知写入操作 |
 | D05 | 少执行一个 Skill 或重用旧 visit 结果 | 不能退出阶段 |
+| D05a | 模型调用计划外 Skill | 记录 contextual 调用，planned 顺序和退出守卫不变 |
 | D06 | Build 空 Skill | 仍执行实现、独立审查、提交候选 |
 | D07 | 老候选报告、伪造身份、缺验收 ID | 全部拒绝 |
 | D08 | 四轮候选连续失败 | 三次自动修复后等待人工 |

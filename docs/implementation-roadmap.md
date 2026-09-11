@@ -22,14 +22,14 @@ shape -> build -> verify -> completed
 
 ### 2.2 人工编排，机器执行
 
-每个 change 由用户的 `brief.md` 和人工编排的 `Run Plan` 驱动。Run Plan 决定各阶段使用哪些 Skill 及顺序；列入计划即必须执行。开始执行后生成计划快照。Agent 不动态改变计划；需求变化需回 Shape，经人工确认后递增 brief_revision。
+项目维护多个可复用的 Workflow Profile，每个 Profile 规定各阶段的 planned Skill 及顺序。change 由 `brief.md` 驱动，并在启动时选择一个 Profile；状态保存其解析快照用于恢复和审计。模型仍可按上下文触发 Profile 之外的 contextual Skill，这类调用不受顺序约束，也不参与阶段推进门禁。
 
 ### 2.3 Skill 是阶段内执行单元
 
 Skill 不是状态，也不单独扩展状态图。阶段内部统一执行：
 
 ```text
-读取阶段计划 -> 执行 Skill -> Agent 工作 -> 检查完成条件 -> 提交检查点
+读取 Workflow 快照 -> 执行 planned Skill -> Agent 工作 -> 检查完成条件 -> 提交检查点
                                   ^                         |
                                   +-------- 未完成 --------+
 ```
@@ -38,14 +38,14 @@ Build 没有 Skill 时也必须可执行；Shape 可以强制执行 `grill-me`�
 
 ### 2.4 单文件状态与恢复边界
 
-主状态文件是唯一恢复依据，包含计划快照、Skill 进度、交接引用和 history；checkpoint 指主状态的一次原子提交，不增加独立检查点数据库。JSONL 是运行诊断日志，不能覆盖主状态。外部调用前先记录 running；调用结果与状态写入无法跨进程原子提交，中断后的未知结果必须核对，不能承诺副作用恰好执行一次。
+主状态文件是唯一恢复依据，包含 Workflow 快照、Skill 进度、交接引用和 history；checkpoint 指主状态的一次原子提交，不增加独立检查点数据库。JSONL 是运行诊断日志，不能覆盖主状态。外部调用前先记录 running；调用结果与状态写入无法跨进程原子提交，中断后的未知结果必须核对，不能承诺副作用恰好执行一次。
 
 ## 3. 目标架构
 
 ```text
                     +----------------------+
-                    | Human-authored Plan  |
-                    | run-plan.yaml        |
+                    | Project Workflows    |
+                    | .phixlin/workflows/  |
                     +----------+-----------+
                                |
                                v
@@ -79,16 +79,16 @@ Build 没有 Skill 时也必须可执行；Shape 可以强制执行 `grill-me`�
 | `skill-runner` | 加载和调用已编排 Skill，记录执行结果 |
 | `codex-adapter` | 将统一调用映射到 Codex CLI/runtime |
 | `evidence-store` | 事件、日志、Skill 输出、handoff 和报告 |
-| `cli` | 创建运行、推进、暂停、恢复、审批、导出 |
-| `schemas` | Run Plan、状态、事件、handoff 的最小校验 |
+| `cli` | 创建 change、推进、暂停、恢复、审批、导出 |
+| `schemas` | Workflow Profile、状态、事件、handoff 的最小校验 |
 
-## 4. Run Plan 设计
+## 4. 项目 Workflow Profile 设计
 
-Run Plan 是人针对一个可实施编码需求编排的计划，不是运行实例。需求以 change-id 为唯一管理单元；恢复、修复、需求调整和重新确认都属于同一个 change。MVP 不引入 run-id。计划仅保存各阶段 Skill 名称与顺序，不扩展 Skill 注册系统。
+Workflow Profile 是项目级、可复用的 Skill 编排，一个项目可以提供 `standard`、`deep-shape`、`security-sensitive` 等多个 Profile。change 只选择 Profile，不拥有编排定义。恢复、修复、需求调整和重新确认都属于同一个 change。
 
 ```yaml
 version: 1
-name: implement-user-auth
+name: deep-shape
 workflow: phixlin-flow-v1
 runtime: codex
 
@@ -105,7 +105,7 @@ stages:
       - code-review
 ```
 
-首期只需要支持以下字段：
+项目中的配置位置为 `.phixlin/workflows/<name>.yaml`。首期只需要支持以下字段：
 
 - `version`
 - `workflow`
@@ -114,18 +114,29 @@ stages:
 - Skill 顺序（数组顺序）
 - 首期固定 Shape 和最终结果人工确认，不增加可配置审批策略
 
-Skill 使用既有 SKILL.md，不设计新 Manifest。名称通过本地简短映射解析到路径，也可以直接引用路径。自建 Skill 与开源仓库的某个子目录走相同解析流程；首期由人提前安装，保留来源和许可证，启动时校验相对资源可访问。数组内声明的 Skill 全部必执行，不想执行就不放入计划。
+Skill 使用既有 SKILL.md，不设计新 Manifest。名称通过本地简短映射解析到路径，也可以直接引用路径。自建 Skill 与开源仓库的某个子目录走相同解析流程；首期由人提前安装，保留来源和许可证，启动时校验相对资源可访问。Profile 中声明的 Skill 全部必执行，不想执行就不放入 Profile。
 
-### 4.1 计划快照
+### 4.1 Workflow 选择与执行快照
 
-`start` 时将解析后的计划嵌入主状态，`plan.snapshot.yaml` 只是可再生的导出副本，并记录：
+`start <change-id> --workflow deep-shape` 时解析项目 Profile，并将执行快照嵌入 change 主状态，记录：
 
-- 计划内容哈希
+- Profile 名称、版本和内容哈希
 - 每个 Skill 的解析路径、内容摘要和相关本地资源摘要；可得时记录来源 commit
 - 运行时名称
 - 创建时间和创建者
 
-执行期间禁止直接修改快照。人工 replan 在同一 change 中递增 plan.revision，回 Shape 重新确认并使旧候选/审批失效；恢复和执行重试不创建新需求。
+项目 Profile 后续修改不影响已启动 change。需要切换时显式执行 `switch-workflow`，重新冻结快照、回 Shape，并使旧候选和审批失效。
+
+### 4.2 Planned 与 Contextual Skill
+
+- `planned`：来自所选 Profile，由控制器依次派发；全部完成是阶段退出条件。
+- `contextual`：模型根据当前上下文被动触发的计划外 Skill；允许零次或多次、顺序不固定，只记录调用和工件。
+- contextual Skill 不能改写 Profile 快照、跳过 planned Skill 或直接推进阶段。
+- runtime 有可信调用事件时记录为 observed；只有模型声明时记录为 reported，二者在审计中区分。
+
+### 4.3 Skill Handoff
+
+Skill 间交接由 Harness 普通代码完成，不增加 LLM normalizer。每次调用保存 `SkillExecutionRecord`：调用绑定、raw output、工件引用和 workspace 前后摘要。下一个 Skill 获得当前 brief/spec、直接前驱完整输出、此前工件引用和当前 workspace diff；业务语义由阶段 Agent 在 Shape、Build、Verify 边界统一收口。
 
 ## 5. 状态机扩展
 
@@ -138,7 +149,7 @@ shape -> build -> verify -> completed
 在状态中增加最小 Skill 执行信息：
 
 ```yaml
-plan_snapshot:
+workflow_snapshot:
   hash: sha256:...
   stages:
     shape: [grill-me, brainstorming]
@@ -165,7 +176,7 @@ pending | running | completed | failed
 
 阶段退出守卫检查：
 
-1. 当前阶段进入轮次中，所有已编排 Skill 是否 `completed`
+1. 当前阶段进入轮次中，所有 planned Skill 是否 `completed`
 2. 阶段输出是否存在
 3. 本项目定义的阶段验收条件是否满足
 4. 是否存在未解决 blocker
@@ -201,7 +212,7 @@ interface RuntimeAdapter {
 Codex Adapter 负责：
 
 - 生成稳定的阶段提示和 Skill 提示
-- 注入当前状态、计划快照和阶段交接
+- 注入当前状态、Workflow 快照和阶段交接
 - 设置最小所需 sandbox 权限
 - 捕获 JSONL 事件和最终结构化结果
 - 绑定 `execution_ref`
@@ -276,7 +287,7 @@ Finalize 是 Verify 阶段的完成动作，主要执行：
 - 检查 Verify pass
 - 生成最终报告
 - 检查当前候选已有人工确认
-- 归档 plan、state、events、handoff、测试报告和代码变更摘要
+- 归档 Workflow 快照、state、events、handoff、测试报告和代码变更摘要
 - 本地归档成功后将 phase 置为 `completed`，status 置为 `done`
 
 首期归档采用 keep 工作区语义，不自动 merge、push、创建 PR 或发布。归档写入失败时留在 Verify 的 blocked 状态，修复后可幂等重试，不重新运行已确认的候选。
@@ -308,7 +319,7 @@ Finalize 是 Verify 阶段的完成动作，主要执行：
 
 所有状态写入使用 `state_version` + mutation lock + 原子替换。单纯先读版本再 rename 并不足以防止并发写入。锁覆盖读取、校验和提交；实现必须测试并发竞争、陈旧锁及写入中断。外部调用成功但状态尚未提交的窗口通过结果核对处理，不宣称 CAS 能消除该窗口。
 
-保证触发意味着控制器按计划显式派发 Skill 内容，并记录宿主生成的 execution_ref、输入摘要、过程和输出；不是依赖 Agent 自行发现 Skill，也不是信任模型自报的 completed。控制器校验结构化结果和阶段工件后才提交完成。模型是否完全遵循自然语言 Skill 的每条指令无法机械证明，需依靠针对任务的验证与人工确认。源码写权限若同时覆盖状态目录，这也不是恶意 Agent 防篡改边界；控制目录应置于 Agent 可写工作区之外，并在 Codex 能力试验中验证隔离。
+planned Skill 的保证触发意味着控制器按 Profile 快照显式派发 Skill 内容，并记录宿主生成的 execution_ref、输入摘要、过程和输出。contextual Skill 是否触发由模型和 runtime 决定，不提供必达保证；有可信调用事件时记录为 observed，仅有模型声明时记录为 reported。contextual Skill 不改变 planned 顺序和退出守卫。模型是否完全遵循自然语言 Skill 的每条指令无法机械证明，需依靠针对任务的验证与人工确认。
 
 ## 9. 技术路线图
 
@@ -317,7 +328,7 @@ Finalize 是 Verify 阶段的完成动作，主要执行：
 目标是 Codex 单平台可完整运行：
 
 ```text
-Run Plan -> Shape Skills -> Build -> Verify -> finalize -> completed
+Workflow Profile -> Shape Skills -> Build -> Verify -> finalize -> completed
 ```
 
 M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真实调用，避免直到 M3 才暴露平台问题。M3 是首个端到端可用版本的硬验收门，完整故障恢复与运维增强随后交付。
@@ -340,7 +351,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - Claude Code 会话调用
 - 工具权限映射
 - 输出和恢复语义适配
-- 同一 Run Plan 的跨平台契约测试
+- 同一 Workflow Profile 的跨平台契约测试
 
 ## 10. 实施计划与验收标准
 
@@ -392,7 +403,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - 相同 actionId 幂等，不同载荷冲突；未知外部执行不会盲目重做
 - 不以“先读版本再 rename”作为并发安全实现
 
-#### M0.3 冻结 Run Plan v1
+#### M0.3 冻结项目 Workflow Profile v1
 
 子任务：
 
@@ -403,9 +414,9 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 验收标准：
 
-- 合法计划可以解析并生成快照
+- 项目可定义多个 Profile，合法 Profile 可以解析并生成 change 执行快照
 - 缺少 workflow、runtime 或非法阶段时明确报错
-- Build 空 Skill 计划可以通过校验
+- Build 的 planned Skill 列表为空时可以通过校验
 
 #### M0.4 冻结首期 CLI 和目录结构
 
@@ -418,7 +429,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 验收标准：
 
 - 新开发者可以创建一个编码需求，重启和修复始终用同一 change-id 管理
-- 目录中能区分状态、计划、事件、工件和日志
+- 项目 Profile 与 change 状态分开存放；change 中能区分状态、brief/specs、工件和日志
 
 #### M0.5 前置 Codex 能力试验（进入 M1 前完成）
 
@@ -498,19 +509,19 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ### M2：Skill Runner 与阶段交接
 
-目标：让“人编排 Skill、状态机保证触发”成为可验证能力。
+目标：让项目 Profile 中的 planned Skill 可验证触发，同时允许模型按上下文使用计划外 contextual Skill。
 
 #### M2.1 实现 Skill Resolver
 
 子任务：
 
-- 根据 plan snapshot 按名称解析 Skill
+- 根据项目 Profile 及 change 执行快照按名称解析 Skill
 - 支持本地 Skill 入口
 - 记录解析失败和版本信息
 
 验收标准：
 
-- 计划中的 Skill 能按数组顺序解析
+- Profile 中的 planned Skill 能按数组顺序解析
 - 缺失 Skill 会阻止阶段推进
 - 自建 Skill 和开源子目录 Skill 都可解析；缺少被引用的本地资源时启动失败
 
@@ -527,8 +538,27 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - `grill-me` 和 `brainstorming` 能在 Shape 中按顺序触发
 - 重启进程后已完成 Skill 不重复触发
 - Skill 失败可以重试并留下每次尝试记录
+- 模型触发计划外 Skill 时记录 mode=contextual，不移动 planned Skill 指针
+- contextual Skill 未触发或失败不单独阻止阶段推进；阶段产物不满足守卫时仍不能推进
 
-#### M2.3 自行设计并实现 Handoff 与候选绑定
+#### M2.3 实现确定性 Skill 执行记录与输入组装
+
+子任务：
+
+- 定义 SkillExecutionRecord，记录 binding、raw output、工件和 workspace 摘要
+- 实现直接前驱完整输出、早期工件引用和当前 diff 的确定性输入组装
+- 区分 host-observed 与 model-reported contextual 调用
+- 将语义汇总留给阶段 Handoff，不解析第三方 Skill 的自由文本
+
+验收标准：
+
+- 两个输出格式不同的开源 Skill 无需修改即可顺序交接
+- 后续 Skill 能读取直接前驱完整输出和此前工件引用
+- raw output 或工件保存失败时，planned Skill 不能标记 completed
+- model-reported contextual 调用不能冒充 planned 完成记录
+- 重启后不会重复已提交的执行记录或重复调用已完成 planned Skill
+
+#### M2.4 自行设计并实现阶段 Handoff 与候选绑定
 
 子任务：
 
@@ -542,7 +572,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - Verify 只能消费当前 candidate 的 Builder Handoff
 - 交接引用错误时状态保持不变并返回可诊断错误
 
-#### M2.4 自行实现 Verify 判定与修复循环
+#### M2.5 自行实现 Verify 判定与修复循环
 
 子任务：
 
@@ -587,7 +617,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 验收标准：
 
-- 使用示例 Run Plan 能观察到两个 Shape Skill 的实际执行记录
+- 使用示例 Workflow Profile 能观察到两个 Shape planned Skill 的实际执行记录
 - Build 空 Skill 时 Agent 仍能修改代码
 - Verify 产生测试报告并绑定 candidate
 
@@ -602,7 +632,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 验收标准：
 
 - 一次真实运行进入 `phase: completed, status: done`
-- `plan.snapshot`、状态文件、事件、Skill 输出、diff、测试报告和归档报告齐全
+- Workflow 快照、状态文件、事件、Skill 输出、diff、测试报告和归档报告齐全
 - 从中断点恢复后仍能完成，不重复已完成 Skill
 
 #### M3.4 人工门禁、finalize 和真实修复闭环
@@ -691,7 +721,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 子任务：
 
-- 导出状态快照、plan、事件、handoff、报告和工件索引
+- 导出状态快照、Workflow 快照、事件、handoff、报告和工件索引
 - 生成 manifest 和哈希
 
 验收标准：
@@ -703,7 +733,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 子任务：
 
-- 编写 Run Plan 示例
+- 编写 Workflow Profile 示例
 - 编写 Skill 接入说明
 - 编写失败恢复手册
 
@@ -714,7 +744,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ### M6：第二平台适配（后续）
 
-目标：保持工作流、Run Plan 和证据格式不变，接入 Claude Code。
+目标：保持 Workflow Profile、change 状态和证据格式不变，接入 Claude Code。
 
 #### M6.1 Runtime capability contract
 
@@ -731,7 +761,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 验收标准：
 
-- 同一个 Run Plan 在两个 runtime 上阶段序列一致
+- 同一个项目 Workflow Profile 在两个 runtime 上阶段序列一致
 - Handoff、验收项和最终状态格式一致
 - 平台能力不足时显式 blocked，不静默跳过必需动作
 
@@ -741,11 +771,11 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 - 单项目、以一个可实施需求为管理单元、每个工作区串行执行
 - Codex runtime
-- 本地 Run Plan
+- 项目级多个 Workflow Profile，change 启动时选择一个
 - 本地 Skill
 - shape/build/verify/completed，归档为 finalize 动作
-- Skill 顺序执行
-- 必选 Skill 触发保证
+- planned Skill 顺序执行与触发保证
+- 模型可以触发计划外 contextual Skill
 - Build 可无 Skill
 - CAS、checkpoint、resume、retry
 - Builder Handoff、Verifier Envelope 和审计包
@@ -765,8 +795,9 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 当以下命令在 Codex 环境中成功完成，并生成可校验审计包时，首期目标完成：
 
 ```bash
-phixlin create fix-login --plan examples/codex-full-flow.yaml
-phixlin start fix-login
+phixlin workflow list
+phixlin create fix-login --brief brief.md
+phixlin start fix-login --workflow deep-shape
 phixlin status fix-login
 phixlin resume fix-login
 phixlin export-evidence fix-login
@@ -774,10 +805,11 @@ phixlin export-evidence fix-login
 
 对应运行必须满足：
 
-1. Shape 中配置的必需 Skill 按顺序实际触发。
-2. Build 即使没有 Skill 也能完成代码实现。
-3. Verify 能执行检查并绑定当前候选。
-4. Verify 实现失败能按预算回到 Build 修复；brief/验收变化能回到 Shape。
-5. Verify 通过后可执行人工确认，并由 finalize 完成本地归档。
-6. 进程中断后能恢复且不重复已完成 Skill。
-7. 最终状态为 `phase: completed, status: done`，所有状态、计划、Skill 输出和验证报告均可审计。
+1. Shape Profile 中的 planned Skill 按顺序实际触发。
+2. 模型可以调用 Profile 之外的 contextual Skill，且不改变 planned 顺序和退出守卫。
+3. Build 即使没有 planned Skill 也能完成代码实现。
+4. Verify 能执行检查并绑定当前候选。
+5. Verify 实现失败能按预算回到 Build 修复；brief/验收变化能回到 Shape。
+6. Verify 通过后可执行人工确认，并由 finalize 完成本地归档。
+7. 进程中断后能恢复且不重复已完成 planned Skill。
+8. 最终状态为 `phase: completed, status: done`，状态、Workflow 快照、Skill 输出和验证报告均可审计。
