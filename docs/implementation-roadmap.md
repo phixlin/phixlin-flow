@@ -355,7 +355,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ## 10. 实施计划与验收标准
 
-按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。M0 已开始实施，状态以本节的进度记录和机器证据为准；M1 及以后仍待实施。
+按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。当前 M0.1–M0.4、M1 已完成，M0.5 在显式授权 `danger-full-access` 模式下条件完成；后续 M2/M3 仍待实施。
 
 | 里程碑 | 依赖 | 预计工作日 | 发布门 |
 |---|---|---:|---|
@@ -454,13 +454,24 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 | M0.2 CAS 协议 | 完成设计与 Linux spike | `docs/contracts/cas-v1.md`、`fixtures/cas/d01-d04.yaml`、`pnpm spike:cas` |
 | M0.3 Workflow Profile | 完成 | `schemas/workflow-profile-v1.schema.json`、快照生成器和契约测试 |
 | M0.4 CLI 与目录 | 完成契约冻结 | `docs/contracts/cli-v1.md`、事件与执行结果 Schema |
-| M0.5 Codex 能力 | 部分完成，阻塞 | `docs/evidence/m0/codex-capability-report.json` |
+| M0.5 Codex 能力 | 条件完成 | `docs/evidence/m0/codex-capability-report.json`、`docs/evidence/m0/codex-workspace-write-preflight.json`、`pnpm probe:codex-danger-full-access` |
 
-已在 `codex-cli 0.150.1` 验证认证、JSONL、结构化结果、needs-user/answer 往返、自建 Skill、开源子目录 Skill 和缺失资源阻塞。当前宿主容器无法启动 Codex `workspace-write` sandbox，报 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`；因此 M0 发布门仍未通过，M1 不得将 Build 执行标为可用。Harness 必须在启动时显式 preflight 并阻塞，不能自动降级到 `danger-full-access`。
+已在 `codex-cli 0.150.1` 验证认证、JSONL、结构化结果、needs-user/answer 往返、自建 Skill、开源子目录 Skill 和缺失资源阻塞。新增可复现 preflight：`pnpm probe:codex-workspace-write` 与 `pnpm probe:codex-danger-full-access`。当前宿主容器的 `workspace-write` 仍报 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`，同时 `unshare -Urn` 也被内核拒绝；在用户明确授权下，`danger-full-access` 写入探针已通过。Harness 仅在调用方显式选择该模式时允许它，不自动降级；因此 M0 在本机属于 danger-full-access 条件完成，workspace-write 发布门仍待兼容宿主复测。
 
 ### M1：自有状态机与内层 Loop
 
 目标：实现自己的状态解析、CAS、reducer、动作表、外部调用恢复和 Verify 修复循环，不复用参考文档中的实现代码。
+
+#### M1 实施进度（2026-09-11）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M1.1 状态 reducer | 完成 | `src/contracts/reducer.ts`、状态不变量和 reducer 行为测试 |
+| M1.2 文件 CAS Store | 完成 | `src/contracts/store.ts`、固定 inode 锁、fsync + 原子替换、actionId 幂等和并发写测试 |
+| M1.3 Stage Runner 与内层 Loop | 完成 | `src/runtime/stage-runner.ts`、reserve/dispatch/collect/evaluate 驱动和中断边界测试 |
+| M1.4 Fake Runtime 与向量 | 完成 | `src/runtime/fake.ts`、Stage Runner、repair loop 和 reducer 测试 |
+
+M1 本地发布门已通过 `pnpm check:all`。状态机、CAS、Stage Runner、Fake Runtime 和 Verify 修复回路具备自动化证据；真实 Skill 解析、候选/Handoff 产物生成和 Codex Adapter 分别属于 M2、M3。M0.5 记录的宿主 `workspace-write` sandbox 限制仍阻塞真实 Codex Build，但不再阻塞 M1 的纯状态机和 Fake Runtime 验收。
 
 #### M1.1 实现状态解析与 reducer
 

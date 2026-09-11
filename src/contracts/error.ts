@@ -6,6 +6,13 @@ export type ContractErrorCode =
   | 'INVALID_REDUCER_VECTORS'
   | 'PLANNED_SKILL_MISSING'
   | 'RESOURCE_DRIFT'
+  | 'LOCK_BUSY'
+  | 'VERSION_CONFLICT'
+  | 'ACTION_CONFLICT'
+  | 'INVALID_ACTION'
+  | 'STALE_RESULT'
+  | 'EXECUTION_UNKNOWN'
+  | 'CODEX_PREFLIGHT_FAILED'
 
 export class ContractError extends Error {
   constructor(

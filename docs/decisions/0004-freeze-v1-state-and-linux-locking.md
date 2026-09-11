@@ -42,5 +42,9 @@ and their tests must prevent the Codex-compatible Schema from weakening Harness 
 
 M0 is not fully released on this host because `workspace-write` remains blocked by sandbox setup.
 Authentication, JSONL, structured output, answer continuation, Skill relative resources, and
-missing-resource failure are verified. A compatible host must rerun the workspace-write and control
-isolation probe before M1 is released into Build execution.
+missing-resource failure are verified. The repository now includes a repeatable
+`pnpm probe:codex-workspace-write` probe and a recorded explicit `danger-full-access` control run;
+the latter is evidence of an explicitly authorized broader runtime mode, not a workspace-write
+substitute. The Harness accepts it only when the caller selects `danger-full-access` deliberately;
+there is no automatic fallback. A compatible host must still rerun the workspace-write and control
+isolation probe before claiming the narrower sandbox gate.
