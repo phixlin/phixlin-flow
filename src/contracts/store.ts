@@ -62,7 +62,7 @@ export class FileStateMutationStore implements StateMutationStore {
       const temp = `${path}.${process.pid}.${randomUUID()}.tmp`
       const handle = await fs.open(temp, 'wx')
       try {
-        await handle.writeFile(stringify(next), 'utf8')
+        await handle.writeFile(stringify(next, { aliasDuplicateObjects: false }), 'utf8')
         await handle.sync()
       } finally { await handle.close() }
       await fs.rename(temp, path)

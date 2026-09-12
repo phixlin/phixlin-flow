@@ -355,7 +355,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ## 10. 实施计划与验收标准
 
-按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。当前 M0.1–M0.4、M1 已完成，M0.5 在显式授权 `danger-full-access` 模式下条件完成；后续 M2/M3 仍待实施。
+按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。当前 M0.1–M0.4、M1 已完成，M0.5 在显式授权 `danger-full-access` 模式下条件完成；M2 按 Harness + Fake Runtime 边界完成，真实 Codex 与工作区执行进入 M3。
 
 | 里程碑 | 依赖 | 预计工作日 | 发布门 |
 |---|---|---:|---|
@@ -547,6 +547,20 @@ M1 本地发布门已通过 `pnpm check:all`。状态机、CAS、Stage Runner、
 - Profile 中的 planned Skill 能按数组顺序解析
 - 缺失 Skill 会阻止阶段推进
 - 自建 Skill 和开源子目录 Skill 都可解析；缺少被引用的本地资源时启动失败
+
+#### M2 实施进度（2026-09-12）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M2.1 Skill Resolver | 完成 | `src/runtime/skill-resolver.ts`、`tests/contracts/skill-resolver.spec.ts`、`docs/decisions/0006-file-skill-resolver.md` |
+| M2.2 Skill Invocation | 完成（Harness） | `stage-runner.ts`、自建 outline/summarize Skills；失败重试、contextual 失败与重启后不重复执行 |
+| M2.3 确定性交接 | 完成（Harness） | `evidence.ts`、冻结输入摘要、前驱完整输出、后续保留 Skill 指令、持久化 operation envelope |
+| M2.4 Handoff 与候选 | 完成（Harness） | Shape 确认、宿主 candidate ID/摘要绑定、独立 Review、旧候选完整归档、漂移拒绝 |
+| M2.5 Verify 与修复 | 完成（Harness） | 宿主检查不可被覆盖、验收全量重置、三次修复预算、失败集合比较、规格/候选漂移路径 |
+
+本轮采用已确认的方案 A：Fake Runtime 提供候选 manifest/diff 与宿主检查结果，Harness 使用真实文件保存、重读并校验它们，不声称已执行真实工作区命令或 Codex。`tests/contracts/m2-runner.spec.ts` 验证从 Shape 确认到 Build/Review/Verify、最终等待人工确认的路径，以及提交后重启、产物损坏、过期结果和修复回归。真实工作区快照与命令采集、Codex 调用和 finalize 属于 M3；实现边界见 `docs/decisions/0007-m2-harness-orchestration.md`。
+
+M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编排、交接、证据和验证循环在 Fake Runtime 边界可恢复、可审计；不表示已经具备 M3 的真实 Codex、工作区命令执行或归档能力。
 
 #### M2.2 实现 Skill Invocation
 

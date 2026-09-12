@@ -12,7 +12,6 @@ export type ContractErrorCode =
   | 'INVALID_ACTION'
   | 'STALE_RESULT'
   | 'EXECUTION_UNKNOWN'
-  | 'CODEX_PREFLIGHT_FAILED'
 
 export class ContractError extends Error {
   constructor(
