@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/workflow-profile-v1.schema.json",
+  "title": "phixlin-flow Workflow Profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "workflow", "runtime", "stages"],
+  "properties": {
+    "version": { "const": 1 },
+    "name": { "$ref": "#/$defs/identifier" },
+    "workflow": { "const": "phixlin-flow-v1" },
+    "runtime": { "const": "codex" },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shape", "build", "verify"],
+      "properties": {
+        "shape": { "$ref": "#/$defs/stage" },
+        "build": { "$ref": "#/$defs/stage" },
+        "verify": { "$ref": "#/$defs/stage" }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "skillReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skills"],
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skillReference" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

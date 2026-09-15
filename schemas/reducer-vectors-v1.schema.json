@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/reducer-vectors-v1.schema.json",
+  "title": "phixlin-flow reducer vectors v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "cases"],
+  "properties": {
+    "schema": { "const": "phixlin.reducer-vectors.v1" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/vector" }
+    }
+  },
+  "$defs": {
+    "eventType": {
+      "enum": [
+        "reserve-operation",
+        "execution-result",
+        "result-continue",
+        "skill-completed",
+        "contextual-skill-observed",
+        "result-needs-user",
+        "user-answer",
+        "result-stage-ready",
+        "brief-change-proposed",
+        "execution-lost",
+        "execution-error",
+        "stage-transition",
+        "confirm-shape",
+        "accept-result",
+        "finalize"
+      ]
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "requirement", "given", "event", "then"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "requirement": { "type": "string", "minLength": 1 },
+        "given": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fixture", "overrides"],
+          "properties": {
+            "fixture": {
+              "enum": ["state/initial.yaml", "state/build.yaml", "state/verify.yaml", "state/completed.yaml"]
+            },
+            "overrides": {
+              "type": "object",
+              "propertyNames": { "pattern": "^/" }
+            }
+          }
+        },
+        "event": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "payload"],
+          "properties": {
+            "type": { "$ref": "#/$defs/eventType" },
+            "payload": { "type": "object" }
+          }
+        },
+        "then": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["outcome", "patch"],
+              "properties": {
+                "outcome": { "const": "commit" },
+                "patch": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": { "pattern": "^/" }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["outcome", "error_code"],
+              "properties": {
+                "outcome": { "const": "reject" },
+                "error_code": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

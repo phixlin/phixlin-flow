@@ -1,0 +1,1 @@
+最小实现方案：仅修改 `src/math.js`，使 `sum(left, right)` 返回 `left + right`；随后运行测试并检查变更文件范围。

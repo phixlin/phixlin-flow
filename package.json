@@ -3,23 +3,40 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "phixlin-flow": "dist/src/cli.js"
+  },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/smoke.spec.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint .",
-    "test:smoke": "vitest run tests/smoke.spec.ts",
+    "spike:cas": "node scripts/spikes/cas-filesystem.mjs",
+    "probe:codex-workspace-write": "node scripts/probes/codex-workspace-write.mjs",
+    "probe:codex-danger-full-access": "CODEX_SANDBOX_MODE=danger-full-access node scripts/probes/codex-workspace-write.mjs",
+    "test:smoke": "pnpm build && vitest run tests/smoke.spec.ts",
     "check:all": "pnpm test && pnpm typecheck && pnpm lint && pnpm test:smoke",
     "postinstall": "lefthook install"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
     "@vitest/coverage-v8": "^5.0.0",
+    "fs-ext": "^2.1.1",
     "lefthook": "^2.1.12",
     "oxlint": "^1.82.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "fs-ext"
+    ]
   }
 }

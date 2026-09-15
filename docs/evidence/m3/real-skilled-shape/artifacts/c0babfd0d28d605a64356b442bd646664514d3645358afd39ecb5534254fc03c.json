@@ -1,0 +1,1 @@
+{"kind":"stage-ready","summary":"已检查 brief、实现文件和现有测试。目标是将 `sum(left, right)` 修复为数值加法；验收要求为 npm test 通过且仅修改必要文件。参数类型未明确，但现有测试与算术和语义足以假定数值输入；无阻塞歧义。未修改工作区。","questions":[],"proposal":null,"artifacts":[{"path":"artifacts/cc7d3452fc83c142bf2e25a680f16a34957215415e1f3ad417c82fe7eb04065b.json","sha256":"cc7d3452fc83c142bf2e25a680f16a34957215415e1f3ad417c82fe7eb04065b","bytes":4519}]}

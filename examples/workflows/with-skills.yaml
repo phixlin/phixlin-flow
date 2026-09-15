@@ -1,0 +1,12 @@
+version: 1
+name: with-skills
+workflow: phixlin-flow-v1
+runtime: codex
+stages:
+  shape:
+    skills:
+      - requirements-review
+  build:
+    skills: []
+  verify:
+    skills: []

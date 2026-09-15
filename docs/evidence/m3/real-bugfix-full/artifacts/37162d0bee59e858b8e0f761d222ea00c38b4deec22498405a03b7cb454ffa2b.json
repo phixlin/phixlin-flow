@@ -1,0 +1,1 @@
+独立检查确认候选实现将 src/math.js 中的 sum(left, right) 从减法修复为算术加法。npm test 成功通过（1 个测试通过、0 个失败），git diff --name-only 仅显示 src/math.js，符合变更范围要求。

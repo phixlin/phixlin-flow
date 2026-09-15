@@ -1,0 +1,25 @@
+{
+  "schema": "phixlin.cas-filesystem-spike.v1",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x64",
+    "node": "v24.19.0",
+    "fs_ext": "2.1.1"
+  },
+  "lock": {
+    "fixed_inode": true,
+    "contention_rejected": true,
+    "crash_released": true
+  },
+  "atomic_replace": {
+    "interrupted_temp_did_not_replace_state": true,
+    "committed_complete_state": true,
+    "sequence": [
+      "write-temp",
+      "fsync-temp",
+      "rename",
+      "fsync-directory"
+    ]
+  },
+  "passed": true
+}

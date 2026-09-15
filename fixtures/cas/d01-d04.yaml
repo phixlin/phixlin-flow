@@ -1,0 +1,44 @@
+schema: phixlin.cas-fault-vectors.v1
+vectors:
+  - id: D01
+    trigger: Two processes call mutate with the same expected version and different action IDs.
+    fault_points:
+      - before-lock
+      - after-lock-before-read
+      - after-read-before-reduce
+    expected:
+      - Exactly one mutation commits.
+      - State version increases by one.
+      - The loser receives VERSION_CONFLICT or LOCK_BUSY without writing.
+
+  - id: D02
+    trigger: A caller repeats an action ID after losing the mutation response.
+    variants:
+      same_payload: Return the original receipt with replayed true.
+      different_payload: Return ACTION_CONFLICT without writing.
+    expected:
+      - The reducer runs at most once for the action ID.
+      - Canonical payload digests decide whether the retry is identical.
+
+  - id: D03
+    trigger: Kill the writer at each durable replacement boundary.
+    fault_points:
+      - after-temp-write
+      - after-temp-fsync
+      - after-rename
+      - after-directory-fsync-before-response
+    expected:
+      - Readers observe a complete old or new state document.
+      - Temp files are never selected as state.
+      - Unknown commit outcome is resolved by reading action ID history.
+
+  - id: D04
+    trigger: Kill the controller after reserve and while the Runtime process may still run.
+    fault_points:
+      - after-reserve-before-dispatch
+      - after-dispatch-before-result
+      - after-result-artifact-before-commit
+    expected:
+      - Recovery enters reconciling.
+      - No second workspace-write operation is dispatched automatically.
+      - A valid bound result is collected and committed once.

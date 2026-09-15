@@ -1,0 +1,1 @@
+{"argv":["node",".phixlin/host-repair-check.mjs"],"cwd":"/tmp/phixlin-m3-e2e.AditL1","exit_code":9,"stdout":"","stderr":"故障注入：首轮 Verify 检查失败\n"}

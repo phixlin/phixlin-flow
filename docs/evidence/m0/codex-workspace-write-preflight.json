@@ -1,0 +1,23 @@
+{
+  "schema": "phixlin.codex-workspace-write-preflight.v1",
+  "tested_at": "2026-09-12T00:18:00Z",
+  "codex_cli": "0.150.1",
+  "workspace_write": {
+    "status": "blocked",
+    "command": "codex exec --ephemeral --skip-git-repo-check --sandbox workspace-write --json",
+    "observed_error": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+    "write_marker_created": false
+  },
+  "danger_full_access": {
+    "status": "passed",
+    "command": "codex exec --ephemeral --skip-git-repo-check --sandbox danger-full-access --json",
+    "write_marker_created": true,
+    "marker": "PHIXLIN_DANGER_FULL_ACCESS_OK",
+    "explicit_user_authorization": true
+  },
+  "host_diagnostics": {
+    "unshare_user_network_namespace": "Operation not permitted",
+    "effective_capabilities": "0000000000000000"
+  },
+  "conclusion": "The runtime is authenticated and executable. workspace-write remains unavailable because this container cannot provide the required network namespace; danger-full-access passed under explicit user authorization and may be selected as a deliberate, broader-security runtime mode."
+}

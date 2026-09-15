@@ -1,0 +1,240 @@
+schema: phixlin.flow.v1
+change_id: m0-example
+title: Freeze the v1 protocol
+state_version: 2
+created_at: 2026-09-11T08:00:00Z
+updated_at: 2026-09-11T08:30:00Z
+workspace:
+  root: /workspace/example
+  repository: example
+  baseline:
+    path: artifacts/workspace-baseline.json
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 24
+  allowed_paths:
+    - src/
+    - tests/
+workflow:
+  name: standard
+  version: 1
+  workflow: phixlin-flow-v1
+  runtime: codex
+  digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  stages:
+    shape:
+      - name: local-shape
+        path: .agents/skills/local-shape/SKILL.md
+        digest: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+        resources:
+          - path: references/questions.md
+            sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+            bytes: 120
+        source_commit: null
+    build: []
+    verify:
+      - name: test-runner
+        path: vendor/openai-skills/test-runner/SKILL.md
+        digest: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        resources: []
+        source_commit: 0123456789abcdef0123456789abcdef01234567
+outer:
+  phase: verify
+  status: await-user
+  stage_visit: 3
+  iteration: 1
+inner:
+  state: waiting-user
+  position:
+    action: verify-candidate
+    skill_index: null
+    turn: 3
+    attempt: 0
+  interaction_id: accept-candidate-1
+budget:
+  turns_used: 3
+  turn_limit: 20
+  execution_failures: 0
+  execution_failure_limit: 3
+  repairs_used: 0
+  repair_limit: 3
+  no_progress: 0
+  no_progress_limit: 3
+skills:
+  - invocation_id: verify-visit-3-skill-0
+    mode: planned
+    index: 0
+    name: test-runner
+    source_digest: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    observation: host-observed
+    status: completed
+    attempts: 1
+    input_digest: "5555555555555555555555555555555555555555555555555555555555555555"
+    raw_output:
+      path: artifacts/verify-skill-output.json
+      sha256: "6666666666666666666666666666666666666666666666666666666666666666"
+      bytes: 210
+    artifacts: []
+    workspace_before: "7777777777777777777777777777777777777777777777777777777777777777"
+    workspace_after: "7777777777777777777777777777777777777777777777777777777777777777"
+    completed_by: execution-verify-skill-1
+stage_context:
+  binding:
+    change_id: m0-example
+    stage_visit: 3
+    workflow_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    brief_revision: 1
+    spec_revision: 1
+    candidate_id: candidate-1
+    input_digest: "8888888888888888888888888888888888888888888888888888888888888888"
+  revision: 1
+  planned_completed:
+    - test-runner
+  execution_records:
+    - verify-visit-3-skill-0
+  stage_artifacts:
+    - path: artifacts/verification-1.json
+      sha256: "9999999999999999999999999999999999999999999999999999999999999999"
+      bytes: 480
+brief:
+  revision: 1
+  digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  artifact:
+    path: artifacts/brief-revision-1.md
+    sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    bytes: 180
+  confirmed:
+    actor: human@example.test
+    action_id: confirm-shape-1
+    subject_digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    at: 2026-09-11T08:10:00Z
+shape:
+  spec_revision: 1
+  digest: "2222222222222222222222222222222222222222222222222222222222222222"
+  documents:
+    - path: artifacts/spec-revision-1.md
+      sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+      bytes: 420
+  acceptance:
+    - id: A1
+      text: Four lifecycle fixtures validate
+      verification: pnpm test
+  checks:
+    - id: unit
+      argv:
+        - pnpm
+        - test
+      cwd: .
+      timeout_ms: 120000
+  approval:
+    actor: human@example.test
+    action_id: confirm-shape-1
+    subject_digest: "2222222222222222222222222222222222222222222222222222222222222222"
+    at: 2026-09-11T08:10:00Z
+candidate:
+  candidate_id: candidate-1
+  spec_revision: 1
+  iteration: 1
+  candidate_digest: "1111111111111111111111111111111111111111111111111111111111111111"
+  file_manifest:
+    path: artifacts/candidate-1-manifest.json
+    sha256: "1212121212121212121212121212121212121212121212121212121212121212"
+    bytes: 320
+  diff:
+    path: artifacts/candidate-1.diff
+    sha256: "1313131313131313131313131313131313131313131313131313131313131313"
+    bytes: 1024
+  builder_execution_ref: execution-builder-1
+  summary: Implemented and tested the v1 contract
+  addressed_acceptance_ids:
+    - A1
+  known_limits: []
+  review:
+    execution_ref: execution-reviewer-1
+    candidate_digest: "1111111111111111111111111111111111111111111111111111111111111111"
+    verdict: pass
+    report:
+      path: artifacts/candidate-1-review.md
+      sha256: "1414141414141414141414141414141414141414141414141414141414141414"
+      bytes: 260
+verification:
+  candidate_id: candidate-1
+  candidate_digest: "1111111111111111111111111111111111111111111111111111111111111111"
+  spec_revision: 1
+  attempt: 1
+  execution_ref: execution-verifier-1
+  checks:
+    - id: unit
+      result: pass
+      exit_code: 0
+      report:
+        path: artifacts/check-unit.json
+        sha256: "1515151515151515151515151515151515151515151515151515151515151515"
+        bytes: 160
+  acceptance:
+    - id: A1
+      result: pass
+      reason: Contract tests passed
+  verdict: pass
+  unresolved_ids: []
+  approval: null
+interaction:
+  id: accept-candidate-1
+  kind: result-approval
+  binding:
+    change_id: m0-example
+    stage_visit: 3
+    workflow_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    brief_revision: 1
+    spec_revision: 1
+    candidate_id: candidate-1
+    input_digest: "8888888888888888888888888888888888888888888888888888888888888888"
+  questions:
+    - Accept candidate-1 as the final result?
+  answers: []
+  resume:
+    state: ready
+    position:
+      action: finalize
+      skill_index: null
+      turn: 3
+      attempt: 0
+blocker: null
+finalization:
+  state: pending
+history:
+  - action_id: confirm-shape-1
+    payload_digest: "4444444444444444444444444444444444444444444444444444444444444444"
+    action: confirm-shape
+    from_version: 0
+    to_version: 1
+    at: 2026-09-11T08:10:00Z
+    before:
+      phase: shape
+      status: await-user
+      inner_state: waiting-user
+    after:
+      phase: build
+      status: active
+      inner_state: ready
+    evidence:
+      - path: artifacts/spec-revision-1.md
+        sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+        bytes: 420
+  - action_id: verify-candidate-1
+    payload_digest: "1616161616161616161616161616161616161616161616161616161616161616"
+    action: verify-candidate
+    from_version: 1
+    to_version: 2
+    at: 2026-09-11T08:30:00Z
+    before:
+      phase: build
+      status: active
+      inner_state: stage-ready
+    after:
+      phase: verify
+      status: await-user
+      inner_state: waiting-user
+    evidence:
+      - path: artifacts/verification-1.json
+        sha256: "9999999999999999999999999999999999999999999999999999999999999999"
+        bytes: 480

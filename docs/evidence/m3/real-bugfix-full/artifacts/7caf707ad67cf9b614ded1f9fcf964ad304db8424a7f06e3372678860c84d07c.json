@@ -1,0 +1,1 @@
+{"argv":["git","diff","--name-only"],"cwd":"/tmp/phixlin-m3-e2e.AditL1","exit_code":0,"stdout":"src/math.js\n","stderr":""}
