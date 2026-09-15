@@ -126,7 +126,7 @@ type Lifecycle =
       result: ArtifactRef }
   | { state: 'waiting-user'; position: LoopPosition; interaction_id: string }
   | { state: 'blocked'; position: LoopPosition; blocker_id: string }
-  | { state: 'stage-ready'; position: LoopPosition; evidence: ArtifactRef[] };
+  | { state: 'stage-ready'; evidence: ArtifactRef[] };
 type SkillExecutionRecord = {
   invocation_id: string; mode: 'planned' | 'contextual';
   index: number | null; name: string; source_digest: string;
@@ -268,7 +268,7 @@ async function driveChange(changeId) {
       const result = await adapter.execute(makeInput(reserved));
       await collectBoundResult(reserved, result);
     } else {
-      // evaluate/advance 都经事件提交，不直接改 YAML；advance 按 position.action 执行业务守卫。
+      // evaluate/transition/finalize 都经事件提交，不直接改 YAML。
       await applyCommand(state, command);
     }
   }
