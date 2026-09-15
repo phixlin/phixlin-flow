@@ -12,5 +12,6 @@
 | 0008-codex-runtime-adapter | Codex Runtime 适配器 | active |
 | 0009-host-owned-runtime-evidence | 宿主管理运行时证据 | active |
 | 0010-m4-recovery-and-fault-boundaries | M4 恢复与故障边界 | active |
+| 0011-m5-operational-status-and-audit | M5 运维状态与离线审计 | active |
 
 决策记录采用三段式：Context（当时的约束）、Decision（选了什么）、Consequences（代价与不做的部分）。已归档的记录冻结不改；新决策新开文件推翻旧决策。

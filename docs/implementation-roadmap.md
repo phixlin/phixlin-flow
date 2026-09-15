@@ -763,6 +763,8 @@ M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结�
 
 目标：在完成端到端闭环后，提升可观察性和团队使用效率。
 
+状态：已完成。`status` 已提供人工介入判断和恢复命令；审计包支持完整文件哈希与离线校验；三条本地示例、Skill 接入说明和失败恢复手册已纳入仓库。
+
 #### M5.1 运行状态查询
 
 子任务：
@@ -799,6 +801,12 @@ M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结�
 
 - 新用户可以按文档运行一个本地示例
 - 示例覆盖有 Skill、无 Skill、Verify 失败三种路径
+
+实现与验收证据：
+
+- `src/operations/status.ts` 与 `tests/contracts/operations.spec.ts` 覆盖阶段、loop、Skill 进度、最近事件、人工介入和恢复命令。
+- `src/operations/evidence.ts`、`schemas/evidence-manifest-v1.schema.json` 与审计包测试覆盖完整导出、离线校验、缺失、篡改和额外文件。
+- `examples/`、`docs/guides/skill-integration.md` 与 `docs/guides/failure-recovery.md` 覆盖无 Skill、有 Skill 和 Verify 修复路径。
 
 ### M6：第二平台适配（后续）
 

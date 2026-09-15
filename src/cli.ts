@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
-import { parse, stringify } from 'yaml'
+import { readFile } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
+import { parse } from 'yaml'
 import { randomUUID } from 'node:crypto'
 import { createWorkflowSnapshot } from './contracts/workflow.js'
 import { digestJson } from './contracts/digest.js'
-import { decide } from './contracts/decide.js'
 import { FileStateMutationStore } from './contracts/store.js'
 import { validateWorkflowProfile } from './contracts/validation.js'
 import { CodexRuntimeAdapter } from './runtime/codex.js'
@@ -13,6 +12,8 @@ import { FileEvidenceStore } from './runtime/evidence.js'
 import { FileSkillResolver } from './runtime/skill-resolver.js'
 import { StageRunner } from './runtime/stage-runner.js'
 import type { ChangeState } from './contracts/types.js'
+import { exportEvidenceBundle, verifyEvidenceBundle } from './operations/evidence.js'
+import { buildStatus, getNextAction } from './operations/status.js'
 
 function option(args: string[], name: string, required = false): string | undefined {
   const index = args.indexOf(name)
@@ -33,11 +34,7 @@ function context() {
 }
 
 function nextAction(state: ChangeState): string {
-  const decision = decide(state)
-  if (decision.kind === 'dispatch' || decision.kind === 'advance') return decision.action
-  if (decision.kind === 'wait' && decision.reason === 'paused') return 'paused'
-  if (decision.kind === 'wait' && state.interaction) return state.interaction.kind
-  return decision.kind === 'wait' ? decision.reason : decision.kind
+  return getNextAction(state)
 }
 
 async function verifyArtifacts(state: ChangeState, evidence: FileEvidenceStore): Promise<void> {
@@ -110,44 +107,21 @@ async function start(changeId: string, args: string[]) {
 async function exportEvidence(changeId: string, args: string[]) {
   const { changes, store } = context()
   const state = await store.read(changeId)
-  const output = resolve(option(args, '--output', true)!)
-  await mkdir(output, { recursive: false })
-  await mkdir(join(output, 'artifacts'))
-  const evidence = new FileEvidenceStore(join(changes, changeId))
-  const pending: { path: string; sha256: string; bytes: number }[] = []
-  const seen = new Map<string, { path: string; sha256: string; bytes: number }>()
-  const collect = (value: unknown): void => {
-    if (Array.isArray(value)) { for (const item of value) collect(item); return }
-    if (!value || typeof value !== 'object') return
-    const record = value as Record<string, unknown>
-    if (typeof record.path === 'string' && record.path.startsWith('artifacts/') && typeof record.sha256 === 'string' && typeof record.bytes === 'number') pending.push(record as { path: string; sha256: string; bytes: number })
-    for (const child of Object.values(record)) collect(child)
-  }
-  collect(state)
-  while (pending.length) {
-    const reference = pending.shift()!
-    if (seen.has(reference.path)) continue
-    const content = await evidence.read(reference)
-    seen.set(reference.path, reference)
-    await mkdir(dirname(join(output, reference.path)), { recursive: true })
-    await writeFile(join(output, reference.path), content, { flag: 'wx' })
-    try { collect(JSON.parse(content)) } catch { /* JSONL、Markdown 和命令输出没有嵌套工件引用。 */ }
-  }
-  await writeFile(join(output, 'flow-state.yaml'), stringify(state), { flag: 'wx' })
-  await writeFile(join(output, 'workflow.json'), `${JSON.stringify(state.workflow, null, 2)}\n`, { flag: 'wx' })
-  const manifest = { schema: 'phixlin.evidence-manifest.v1', change_id: changeId, state_version: state.state_version, generated_at: new Date().toISOString(), files: [...seen.values()].sort((left, right) => left.path.localeCompare(right.path)) }
-  await writeFile(join(output, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-  return manifest
+  return exportEvidenceBundle(state, join(changes, changeId), option(args, '--output', true)!)
 }
 
 async function main() {
   const [command, changeId, ...args] = process.argv.slice(2)
   if (!command || !changeId) throw new Error('用法：phixlin-flow <command> <change-id> [options]')
+  if (command === 'verify-evidence') {
+    process.stdout.write(`${JSON.stringify(await verifyEvidenceBundle(changeId), null, 2)}\n`)
+    return
+  }
   identifier(changeId, 'change-id')
   const { repository, changes, store } = context()
   let output: unknown
   if (command === 'start') output = await start(changeId, args)
-  else if (command === 'status') { const state = await store.read(changeId); output = { change_id: changeId, state_version: state.state_version, phase: state.outer.phase, status: state.outer.status, next_action: nextAction(state), interaction: state.interaction, blocker: state.blocker, budget: state.budget } }
+  else if (command === 'status') output = buildStatus(await store.read(changeId))
   else if (command === 'history') output = (await store.read(changeId)).history
   else if (command === 'export-evidence') output = await exportEvidence(changeId, args)
   else if (command === 'pause') output = await mutateHuman(command, changeId, args, {})
