@@ -1,5 +1,7 @@
 # CAS Commit Protocol v1
 
+> 中文说明：CAS（比较并交换）提交协议用于并发安全地写入状态。方法名、错误码和 Mermaid 标识保持英文，正文面向简体中文贡献者。
+
 The M1 store implements the exported `StateMutationStore` draft:
 
 ```ts
@@ -40,7 +42,7 @@ state. A crash after rename exposes the new complete state. A directory sync fai
 commit outcome; the caller re-reads history by `actionId` before doing anything else. Temp files are
 never recovery candidates.
 
-## External operation window
+## 外部操作窗口
 
 ```mermaid
 sequenceDiagram
@@ -60,7 +62,7 @@ After reserve, dispatch may have produced workspace side effects. A lost or unkn
 write execution automatically. A collected result can still be committed after a concurrent pause
 when its operation binding remains current; pause prevents the next dispatch.
 
-## Error codes
+## 错误码
 
 | Code | Contract |
 |---|---|

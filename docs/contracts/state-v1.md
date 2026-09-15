@@ -1,12 +1,14 @@
 # State Protocol v1
 
+> 中文说明：本文定义 v1 状态协议。字段名、状态值和 Schema 标识是机器接口，保持英文不翻译；章节说明和示例解释以简体中文为准。
+
 `phixlin.flow.v1` is the only state schema supported by the first implementation. The normative
 machine contract is [`schemas/flow-state-v1.schema.json`](../../schemas/flow-state-v1.schema.json),
 with cross-field invariants enforced by `validateChangeState`. YAML is only the storage syntax;
 duplicate keys, aliases that exceed the parser boundary, unknown properties, unknown schemas, and
 invalid field combinations fail at load time.
 
-## Files and trust boundaries
+## 文件与信任边界
 
 ```text
 <repository>/.phixlin/workflows/<name>.yaml       project configuration
@@ -29,7 +31,7 @@ workspace. Artifact paths in state are normalized paths below the change `artifa
 absolute paths, backslashes, and `..` traversal are invalid. Workflow Skill resources use paths
 relative to their `SKILL.md` and are validated while creating the Workflow snapshot.
 
-## Field dictionary
+## 字段字典
 
 | Field | Contract |
 |---|---|
@@ -55,7 +57,7 @@ relative to their `SKILL.md` and are validated while creating the Workflow snaps
 The full structural types are exported from `src/contracts/types.ts`. Four normative examples live
 under `fixtures/state/`: `initial.yaml`, `build.yaml`, `verify.yaml`, and `completed.yaml`.
 
-## Legal combinations
+## 合法组合
 
 | Outer status | Required inner state | Required side record |
 |---|---|---|
@@ -72,7 +74,7 @@ validated state. `stage-ready` retains the position that produced it, so `advanc
 correct approval, capture, review, verification, or finalization guard. Agent output can request
 readiness, but only the root reducer may change the outer phase.
 
-## Binding invariants
+## 绑定不变量
 
 - `stage_context.binding` matches change ID, visit, Workflow digest, brief/spec revisions, and the
   current candidate when Build has already captured one or Verify is consuming one.
@@ -86,7 +88,7 @@ readiness, but only the root reducer may change the outer phase.
 - Human Shape and result approvals bind to their subject digest. Agent execution results contain no
   approval field. Completion requires an approved passing verification and completed archive.
 
-## External records
+## 外部记录
 
 `schemas/execution-result-v1.schema.json` is the structured result passed to Codex. It deliberately
 uses the smaller response-format JSON Schema subset observed in M0; the Harness checks conditional

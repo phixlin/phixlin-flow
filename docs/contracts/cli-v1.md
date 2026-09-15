@@ -1,5 +1,7 @@
 # CLI and Storage Contract v1
 
+> 中文说明：本文定义命令行与存储契约。命令名、参数名、状态值和错误码属于稳定接口，必须保持英文；其余说明面向简体中文用户和贡献者。
+
 The first binary name is `phixlin-flow`. Every mutating command takes `--expected-version` and
 `--expected-action`, except `start`, which creates version 0 while holding the mutation lock.
 Commands use a single `<change-id>` for initial work, restart, repair, requirement revision, and
