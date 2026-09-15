@@ -627,6 +627,15 @@ M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编�
 
 目标：首个可用版本，使用 Codex 跑完整流程。
 
+#### M3 实施进度（2026-09-15）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M3.1 CodexRuntimeAdapter | 完成（适配器） | `src/runtime/codex.ts`、`docs/decisions/0008-codex-runtime-adapter.md`、`pnpm typecheck` |
+| M3.2 Codex Skill 调用 | 完成 | Stage Runner 注入 Skill 上下文；真实 `codex exec --json` 调用通过 |
+| M3.3 首个真实任务 | 完成 | 真实 Codex 适配器调用返回 `stage-ready` 并保存事件工件 |
+| M3.4 人工门禁、finalize 与修复 | 完成（Harness + Codex Adapter） | M2 门禁接入适配器；真实调用与事件归档通过 |
+
 #### M3.1 实现 CodexRuntimeAdapter
 
 子任务：
