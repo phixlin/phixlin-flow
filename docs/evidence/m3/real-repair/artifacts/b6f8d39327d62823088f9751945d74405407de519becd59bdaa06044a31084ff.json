@@ -1,0 +1,1 @@
+修复 `src/math.js` 的 subtract 实现，使其返回 left - right。Build 阶段仅完成实现并运行常规测试，不运行宿主检查；Verify 阶段在项目根目录执行宿主检查命令。

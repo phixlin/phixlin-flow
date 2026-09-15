@@ -1,8 +1,9 @@
-import { cp, mkdtemp, mkdir, readFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { stringify } from 'yaml'
 import { describe, expect, it } from 'vitest'
-import { ContractError, FileStateMutationStore } from '../../src/index.js'
+import { ContractError, FileStateMutationStore, digestJson } from '../../src/index.js'
 
 describe('file CAS store', () => {
   it('deduplicates action IDs and rejects stale versions', async () => {
@@ -26,5 +27,17 @@ describe('file CAS store', () => {
     expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(1)
     expect((await store.read('change')).state_version).toBe(1)
     expect((await readFile(join(root, 'change/flow-state.yaml'), 'utf8')).startsWith('schema:')).toBe(true)
+  })
+
+  it('rejects state content changed outside the Store without a version increment', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    await mkdir(join(root, 'change'))
+    await cp('fixtures/state/initial.yaml', join(root, 'change/flow-state.yaml'))
+    const store = new FileStateMutationStore(root)
+    const state = await store.read('change')
+    const expectedStateDigest = digestJson(state)
+    state.title = 'tampered by external process'
+    await writeFile(join(root, 'change/flow-state.yaml'), stringify(state))
+    await expect(store.mutate('change', { expectedVersion: 0, expectedStateDigest, actionId: 'reserve', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).rejects.toThrow('state content changed without a version increment')
   })
 })

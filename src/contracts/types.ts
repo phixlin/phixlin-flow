@@ -287,6 +287,7 @@ export interface ResolvedSkill {
 
 export interface MutationRequest<ActionName extends string = string, Payload = unknown> {
   expectedVersion: number
+  expectedStateDigest?: string
   actionId: string
   action: ActionName
   payload: Payload

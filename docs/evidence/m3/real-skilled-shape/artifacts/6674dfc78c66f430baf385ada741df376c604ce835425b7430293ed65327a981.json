@@ -1,0 +1,1 @@
+{"kind":"stage-ready","summary":"目标与约束明确。最小实现是仅在 src/math.js 中让 sum 返回 left + right；通过 npm test 验证，并检查 diff 确认没有其他必要外文件变更。","questions":[],"proposal":null,"artifacts":[{"path":"artifacts/01642221e51f4f480c7c27aa96d9e6de8a8b210dd58657ba9aad2ca1293deef4.json","sha256":"01642221e51f4f480c7c27aa96d9e6de8a8b210dd58657ba9aad2ca1293deef4","bytes":3558}]}

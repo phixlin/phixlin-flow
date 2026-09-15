@@ -34,7 +34,7 @@ export class StageRunner {
   }
 
   private async mutate(changeId: string, state: ChangeState, action: string, payload: Record<string, unknown>): Promise<ChangeState> {
-    const request: MutationRequest<string, Record<string, unknown>> = { expectedVersion: state.state_version, actionId: randomUUID(), action, payload }
+    const request: MutationRequest<string, Record<string, unknown>> = { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action, payload }
     await this.store.mutate(changeId, request)
     return this.store.read(changeId)
   }
@@ -124,6 +124,7 @@ export class StageRunner {
       if (error instanceof ContractError && error.code === 'RESOURCE_DRIFT') return false
       throw error
     }
+    if (this.runtime.inspectCandidate && await this.runtime.inspectCandidate() !== state.candidate.candidate_digest) return false
     return true
   }
 
@@ -142,13 +143,15 @@ export class StageRunner {
     const specifications = []
     for (const document of state.shape?.documents ?? []) specifications.push({ reference: document, content: await this.evidence.read(document) })
     const workspace_diff = state.candidate ? await this.evidence.read(state.candidate.diff) : null
-    return JSON.stringify({ brief: state.brief, brief_content, shape: state.shape, specifications, phase: state.outer.phase, stage_visit: state.outer.stage_visit, skill, instructions, preceding, predecessor_output, workspace: state.workspace, workspace_diff, candidate: state.candidate, verification: state.verification })
+    const stage_artifacts = []
+    for (const reference of state.stage_context.stage_artifacts) stage_artifacts.push({ reference, content: await this.evidence.read(reference) })
+    return JSON.stringify({ brief: state.brief, brief_content, shape: state.shape, specifications, phase: state.outer.phase, stage_visit: state.outer.stage_visit, skill, instructions, preceding, predecessor_output, stage_artifacts, workspace: state.workspace, workspace_diff, candidate: state.candidate, verification: state.verification })
   }
 
-  async drive(changeId: string): Promise<DriveResult> {
+  async drive(changeId: string, maxSteps = 100): Promise<DriveResult> {
     let state = await this.store.read(changeId)
     let steps = 0
-    while (steps++ < 100) {
+    while (steps++ < maxSteps) {
       const decision = decide(state)
       if (decision.kind === 'wait' || decision.kind === 'done') return { state, decision, steps }
       if (decision.kind === 'reconcile') return { state, decision, steps }
@@ -171,6 +174,18 @@ export class StageRunner {
           if (previous) payload.previous_unresolved_ids = JSON.parse(await this.evidence.read(previous.evidence[0])).unresolved_ids
           payload.evidence = [await this.evidence.write(JSON.stringify(state.verification))]
           state = await this.mutate(changeId, state, 'finish-verification', payload)
+          continue
+        }
+        if (state.outer.phase === 'verify' && decision.action === 'finalize') {
+          if (!state.candidate || !state.verification?.approval || state.verification.verdict !== 'pass') throw new ContractError('INVALID_ACTION', ['finalize requires approved passing verification'])
+          const referenced = [state.candidate.file_manifest, state.candidate.diff, state.candidate.review?.report, ...state.verification.checks.map((check) => check.report)].filter((item) => item !== null && item !== undefined)
+          for (const artifact of referenced) await this.evidence.read(artifact)
+          const verification = await this.evidence.writeNamed('verification.md', `# 验证报告\n\n候选：${state.candidate.candidate_id}\n\n结论：${state.verification.verdict}\n\n${state.verification.acceptance.map((item) => `- ${item.id}: ${item.result} - ${item.reason}`).join('\n')}\n`)
+          const delivery = await this.evidence.writeNamed('delivery-summary.json', `${JSON.stringify({ change_id: state.change_id, candidate_id: state.candidate.candidate_id, candidate_digest: state.candidate.candidate_digest, summary: state.candidate.summary, known_limits: state.candidate.known_limits }, null, 2)}\n`)
+          const knowledge = await this.evidence.writeNamed('knowledge.md', `# ${state.title}\n\n${state.candidate.summary}\n\n候选摘要：${state.candidate.candidate_digest}\n`)
+          const artifactIndex = await this.evidence.writeNamed('artifact-index.json', `${JSON.stringify({ schema: 'phixlin.artifact-index.v1', artifacts: referenced }, null, 2)}\n`)
+          const archive = await this.evidence.write(JSON.stringify({ schema: 'phixlin.archive.v1', change_id: state.change_id, workflow: state.workflow, candidate: state.candidate, verification: state.verification, history: state.history, artifacts: [verification, delivery, knowledge, artifactIndex, ...referenced] }))
+          state = await this.mutate(changeId, state, 'finalize', { candidate_id: state.candidate.candidate_id, artifacts: [archive, verification, delivery, knowledge, artifactIndex] })
           continue
         }
         return { state, decision, steps }
@@ -210,6 +225,8 @@ export class StageRunner {
         result: collected,
       })
     }
-    throw new ContractError('INVALID_ACTION', ['stage runner exceeded 100 steps'])
+    if (maxSteps === 100) throw new ContractError('INVALID_ACTION', ['stage runner exceeded 100 steps'])
+    state = await this.store.read(changeId)
+    return { state, decision: decide(state), steps: maxSteps }
   }
 }

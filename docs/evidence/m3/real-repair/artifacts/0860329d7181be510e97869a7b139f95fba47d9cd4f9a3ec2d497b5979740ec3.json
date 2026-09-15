@@ -1,0 +1,10 @@
+# 修复 subtract 并验证修复循环
+
+修复 `src/math.js` 中的 `subtract(left, right)`，使它返回 `left - right`。
+
+验收要求：
+
+- `npm test` 通过。
+- 宿主检查必须包含 `node .phixlin/host-repair-check.mjs`，工作目录为项目根目录。
+- 只修改完成该修复所需的文件。
+- Build 阶段不要运行 `.phixlin/host-repair-check.mjs`；该命令只由 Verify 的宿主检查执行。

@@ -7,7 +7,7 @@ CAS（比较并交换）协议定义状态文件的并发提交边界。方法�
 M1 的存储实现导出的 `StateMutationStore` 草案接口：
 
 ```ts
-mutate(changeId, { expectedVersion, actionId, action, payload }): Promise<MutationReceipt>
+mutate(changeId, { expectedVersion, expectedStateDigest?, actionId, action, payload }): Promise<MutationReceipt>
 ```
 
 每个状态写入方都必须在固定的 `mutation.lock` inode 上获取同一个短时独占 advisory lock。锁的保护范围包括读取、解析、校验、reducer 处理和持久化替换。持锁期间不得运行 Agent、机器检查或网络调用。另一个固定 inode 的 `executor.lock` 用于串行化同一 change 的派发。
@@ -30,7 +30,7 @@ sequenceDiagram
   C-->>C: return mutation receipt
 ```
 
-如果历史记录中已有相同 `actionId` 且规范化 payload 摘要相同，`mutate` 返回原始回执并标记 `replayed: true`。相同 ID 但摘要不同则返回 `ACTION_CONFLICT`。版本不匹配返回 `VERSION_CONFLICT`。只有通过这些检查后才运行 reducer 守卫；守卫失败返回 `INVALID_ACTION`，且不写入状态。
+如果历史记录中已有相同 `actionId` 且规范化 payload 摘要相同，`mutate` 返回原始回执并标记 `replayed: true`。相同 ID 但摘要不同则返回 `ACTION_CONFLICT`。版本不匹配返回 `VERSION_CONFLICT`。Stage Runner 还必须提交调用前的 `expectedStateDigest`；即使外部进程改写状态后保留原版本号，摘要不匹配仍返回 `VERSION_CONFLICT`。只有通过这些检查后才运行 reducer 守卫；守卫失败返回 `INVALID_ACTION`，且不写入状态。
 
 实现会在状态文件所在目录写入唯一命名的临时文件并同步，然后原子重命名，最后同步目录。重命名前崩溃时仍能看到旧的完整状态；重命名后崩溃时能看到新的完整状态。目录同步失败时提交结果未知，调用方必须先按 `actionId` 重新读取历史，再执行其他操作。临时文件永远不能作为恢复候选。
 

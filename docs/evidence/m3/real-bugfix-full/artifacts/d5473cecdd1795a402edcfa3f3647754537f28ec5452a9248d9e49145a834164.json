@@ -1,0 +1,1 @@
+{"argv":["npm","test"],"cwd":"/tmp/phixlin-m3-e2e.AditL1","exit_code":0,"stdout":"\n> test\n> node --test\n\n✔ sum adds two numbers (0.644144ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 62.991066\n","stderr":""}

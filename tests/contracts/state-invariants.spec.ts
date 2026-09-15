@@ -4,6 +4,7 @@ import {
   ContractError,
   decide,
   parseChangeStateYaml,
+  reduce,
   validateChangeState,
   type Action,
   type ArtifactRef,
@@ -83,6 +84,22 @@ describe('valid lifecycle decisions', () => {
     state.outer.status = 'paused'
     expect(validateChangeState(state)).toBe(state)
     expect(decide(state)).toEqual({ kind: 'wait', reason: 'paused' })
+  })
+
+  it('pauses and resumes a quiescent lifecycle without changing its position', () => {
+    const state = fixture('build')
+    const paused = reduce(state, { type: 'pause', actionId: 'pause', payload: {} })
+    expect(paused.outer.status).toBe('paused')
+    expect(paused.inner).toEqual(state.inner)
+    const resumed = reduce(paused, { type: 'resume-state', actionId: 'resume', payload: {} })
+    expect(resumed.outer.status).toBe('active')
+    expect(resumed.inner).toEqual(state.inner)
+  })
+
+  it('resumes a paused human interaction back to await-user', () => {
+    const state = fixture('verify')
+    const paused = reduce(state, { type: 'pause', actionId: 'pause', payload: {} })
+    expect(reduce(paused, { type: 'resume-state', actionId: 'resume', payload: {} }).outer.status).toBe('await-user')
   })
 
   it('waits while blocked', () => {

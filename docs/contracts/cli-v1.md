@@ -11,6 +11,7 @@
 | `start <change-id> --workflow <name> --brief <path>` | 校验 Profile 及全部 Skill 资源，冻结快照，创建 change 目录和初始状态。 |
 | `status <change-id> [--json]` | 校验状态并输出 phase、status、版本、推导出的下一动作、预算、交互或阻塞信息。 |
 | `resume <change-id>` | 获取 executor lock；派发任何操作前先核对未知操作。 |
+| `retry <change-id>` | 人工解除允许重试的 blocker，恢复其保存位置并重置连续执行失败计数。 |
 | `pause <change-id>` | 停止后续派发并请求中断当前操作；只有收取结果或确认终止后才报告 paused。 |
 | `answer <change-id> --interaction <id> --body-file <path>` | 将回答绑定到当前交互并恢复保存的动作；不会批准阶段。 |
 | `confirm-shape <change-id> --actor <id>` | 人工操作，绑定当前 brief 和 Shape 摘要，然后开始新的 Build visit。 |
@@ -20,6 +21,8 @@
 | `history <change-id> [--json]` | 从主状态读取有序的转换回执。 |
 | `export-evidence <change-id> --output <path>` | 导出状态、Workflow 快照、事件、Handoff、报告、清单和已校验的工件索引。 |
 
-如果 Profile 缺失、阶段非法、planned Skill 重复、`SKILL.md` 缺失、引用资源缺失、runtime 不受支持，或控制目录位于 Agent 可写根目录内，`start` 会在创建状态前失败。Build 允许 planned Skill 列表为空，并从 `agent-work` 开始。
+如果 Profile 缺失、阶段非法、planned Skill 重复、`SKILL.md` 缺失、引用资源缺失或 runtime 不受支持，`start` 会在创建状态前失败。Build 允许 planned Skill 列表为空，并从 `agent-work` 开始。使用 `danger-full-access` 时，控制目录没有读取隔离；Stage Runner 通过调用前完整状态摘要检测外部进程绕过 Store 的改写。
+
+`resume` 支持 `--max-steps <n>` 在持久化边界停止本次驱动，并支持 `--sensitive-values-file <path>` 加载非空字符串 JSON 数组。匹配值会在 Codex stdout/stderr 写入事件工件前替换为 `[REDACTED]`。
 
 事件流使用 `phixlin.event.v1`，每个 change 的 `sequence` 单调递增。事件仅用于诊断：可以报告末行缺失或截断，但不能据此向前或向后推进状态。Skill 输出和适配器结果是不可变工件，名称由宿主创建的 operation 或 invocation ID 决定。控制器会先计算字节数和 SHA-256，再把引用写入状态。

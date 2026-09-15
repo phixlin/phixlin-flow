@@ -46,6 +46,20 @@ export class FileStateMutationStore implements StateMutationStore {
     return validateChangeState(parse(source))
   }
 
+  async create(state: ChangeState): Promise<void> {
+    validateChangeState(state)
+    await this.withLock(state.change_id, async () => {
+      const path = this.statePath(state.change_id)
+      const handle = await fs.open(path, 'wx')
+      try {
+        await handle.writeFile(stringify(state, { aliasDuplicateObjects: false }), 'utf8')
+        await handle.sync()
+      } finally { await handle.close() }
+      const dir = await fs.open(dirname(path), 'r')
+      try { await dir.sync() } finally { await dir.close() }
+    })
+  }
+
   async mutate<ActionName extends string, Payload>(changeId: string, request: MutationRequest<ActionName, Payload>): Promise<MutationReceipt> {
     return this.withLock(changeId, async () => {
       const path = this.statePath(changeId)
@@ -57,7 +71,8 @@ export class FileStateMutationStore implements StateMutationStore {
         return { actionId: request.actionId, payloadDigest, previousVersion: existing.from_version, stateVersion: existing.to_version, replayed: true }
       }
       if (request.expectedVersion !== state.state_version) throw new ContractError('VERSION_CONFLICT', [`expected ${request.expectedVersion}, current ${state.state_version}`])
-      const event: ReducerEvent = { type: request.action, actionId: request.actionId, payload: request.payload as Record<string, any> }
+      if (request.expectedStateDigest !== undefined && request.expectedStateDigest !== digestJson(state)) throw new ContractError('VERSION_CONFLICT', ['state content changed without a version increment'])
+      const event: ReducerEvent = { type: request.action, actionId: request.actionId, at: new Date().toISOString(), payload: request.payload as Record<string, any> }
       const next = reduce(state, event)
       const temp = `${path}.${process.pid}.${randomUUID()}.tmp`
       const handle = await fs.open(temp, 'wx')

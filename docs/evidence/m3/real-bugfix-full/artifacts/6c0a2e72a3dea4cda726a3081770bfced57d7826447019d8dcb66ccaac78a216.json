@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"01a0a5a9-d30d-7a53-8f5b-b7af529e60cc"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/5 (stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151522479711661338268d9d6tGjDAS41)"}
+{"type":"error","message":"Reconnecting... 2/5 (stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523163069672748268d9d6ATFzcUrh)"}
+{"type":"error","message":"Reconnecting... 3/5 (stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523231660592118268d9d6vGN0f9Ao)"}
+{"type":"error","message":"Reconnecting... 4/5 (stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523303668869108268d9d6gHOKAMCB)"}
+{"type":"error","message":"Reconnecting... 5/5 (stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523412786720948268d9d6UC1gTxCX)"}
+{"type":"error","message":"stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523503409579448268d9d6oN2vTL87"}
+{"type":"turn.failed","error":{"message":"stream disconnected before completion: OpenAI error, 请重试。请求 ID：202609151523503409579448268d9d6oN2vTL87"}}

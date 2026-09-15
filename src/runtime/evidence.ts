@@ -11,7 +11,16 @@ export class FileEvidenceStore {
   async write(content: string): Promise<ArtifactRef> {
     const bytes = Buffer.from(content)
     const digest = sha256(bytes)
-    const artifact = { path: `artifacts/${digest}.json`, sha256: digest, bytes: bytes.length }
+    return this.writeArtifact({ path: `artifacts/${digest}.json`, sha256: digest, bytes: bytes.length }, bytes)
+  }
+
+  async writeNamed(name: 'verification.md' | 'delivery-summary.json' | 'knowledge.md' | 'artifact-index.json', content: string): Promise<ArtifactRef> {
+    const bytes = Buffer.from(content)
+    const digest = sha256(bytes)
+    return this.writeArtifact({ path: `artifacts/${digest}/${name}`, sha256: digest, bytes: bytes.length }, bytes)
+  }
+
+  private async writeArtifact(artifact: ArtifactRef, bytes: Buffer): Promise<ArtifactRef> {
     const path = join(this.root, artifact.path)
     await mkdir(dirname(path), { recursive: true })
     let handle

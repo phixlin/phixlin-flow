@@ -1,0 +1,27 @@
+{
+  "name": "deep-shape",
+  "version": 1,
+  "workflow": "phixlin-flow-v1",
+  "runtime": "codex",
+  "digest": "f6f84a218d95f80b990a5267521f5b56dff9a4a871d7f964fe70b503655f0ab4",
+  "stages": {
+    "shape": [
+      {
+        "name": "grill-me",
+        "path": "grill-me/SKILL.md",
+        "digest": "215a8c37bb1420e6c3d73bafe169f37fc5399c2149cfe213af46aa289ed424b6",
+        "resources": [],
+        "source_commit": null
+      },
+      {
+        "name": "brainstorming",
+        "path": "brainstorming/SKILL.md",
+        "digest": "e84b1ab9722ac3549f7304fbdc3664f5ec34236f7968f68955ad70da6c027716",
+        "resources": [],
+        "source_commit": null
+      }
+    ],
+    "build": [],
+    "verify": []
+  }
+}

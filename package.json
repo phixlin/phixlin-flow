@@ -3,18 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "phixlin-flow": "dist/src/cli.js"
+  },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/smoke.spec.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint .",
     "spike:cas": "node scripts/spikes/cas-filesystem.mjs",
     "probe:codex-workspace-write": "node scripts/probes/codex-workspace-write.mjs",
     "probe:codex-danger-full-access": "CODEX_SANDBOX_MODE=danger-full-access node scripts/probes/codex-workspace-write.mjs",
-    "test:smoke": "vitest run tests/smoke.spec.ts",
+    "test:smoke": "pnpm build && vitest run tests/smoke.spec.ts",
     "check:all": "pnpm test && pnpm typecheck && pnpm lint && pnpm test:smoke",
     "postinstall": "lefthook install"
   },

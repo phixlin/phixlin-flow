@@ -26,6 +26,7 @@ export interface RuntimeInput {
 
 export interface RuntimeAdapter {
   execute(input: RuntimeInput): Promise<RuntimeResult>
+  inspectCandidate?(): Promise<string>
 }
 
 /** Deterministic runtime used by M1 tests; each queued result is consumed once. */

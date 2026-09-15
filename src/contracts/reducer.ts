@@ -75,6 +75,24 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
   const next = structuredClone(state)
   const p = event.payload
   switch (event.type) {
+    case 'pause': {
+      if (!['active', 'await-user'].includes(state.outer.status) || !['ready', 'evaluating', 'stage-ready', 'waiting-user', 'reconciling'].includes(state.inner.state)) fail('INVALID_ACTION', 'pause requires a quiescent resumable lifecycle')
+      next.outer.status = 'paused'
+      return commit(state, event, next)
+    }
+    case 'resume-state': {
+      if (state.outer.status !== 'paused') fail('INVALID_ACTION', 'resume requires paused state')
+      next.outer.status = state.inner.state === 'waiting-user' ? 'await-user' : 'active'
+      return commit(state, event, next)
+    }
+    case 'retry-blocker': {
+      if (state.outer.status !== 'blocked' || !state.blocker || !state.blocker.allowed_actions.includes('retry')) fail('INVALID_ACTION', 'retry requires a retryable blocker')
+      next.outer.status = 'active'
+      next.inner = structuredClone(state.blocker.resume)
+      next.blocker = null
+      next.budget.execution_failures = 0
+      return commit(state, event, next)
+    }
     case 'reserve-operation': {
       if (state.outer.status !== 'active' || state.inner.state !== 'ready') fail('INVALID_ACTION', 'reserve requires active ready state')
       if (state.budget.turns_used >= state.budget.turn_limit) fail('INVALID_ACTION', 'turn budget exhausted')
@@ -151,11 +169,13 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
     case 'user-answer': {
       if (state.interaction?.id !== p.interaction_id) fail('INVALID_ACTION', 'interaction does not match')
       if (state.interaction === null) fail('INVALID_ACTION', 'interaction does not match')
+      if (!p.answer_artifact) fail('INVALID_ACTION', 'user answer requires a persisted artifact')
       const resumePosition = structuredClone(state.interaction.resume.position)
       const skill = next.skills.find((item) => item.mode === 'planned' && item.index === resumePosition.skill_index)
       if (resumePosition.action === 'skill' && skill) skill.status = 'failed'
+      next.stage_context.stage_artifacts.push(p.answer_artifact)
       next.interaction = null; next.outer.status = 'active'; next.inner = { state: 'ready', position: resumePosition }
-      return commit(state, event, next)
+      return commit(state, event, next, [p.answer_artifact])
     }
     case 'result-continue': {
       operationOf(state, p)
@@ -268,7 +288,7 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
       next.outer.status = 'active'
       next.outer.iteration = Math.max(1, state.outer.iteration)
       next.outer.phase = 'build'; next.outer.stage_visit += 1; next.inner = { state: 'ready', position: { action: next.workflow.stages.build.length ? 'skill' : 'agent-work', skill_index: next.workflow.stages.build.length ? 0 : null, turn: 0, attempt: 0 } }; resetStage(next, 'build')
-      return commit(state, event, next)
+      return commit(state, event, next, p.comment_artifact ? [p.comment_artifact] : [])
     }
     case 'publish-shape': {
       const operation = operationOf(state, p)
@@ -289,13 +309,31 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
       return commit(state, event, next)
     }
     case 'accept-result': {
-      if (!state.verification || state.verification.verdict !== 'pass' || state.candidate === null || state.candidate.candidate_id !== p.candidate_id || state.candidate.candidate_digest !== p.candidate_digest) fail('INVALID_ACTION', 'result is not current and passing')
-      next.verification!.approval = { actor: p.actor ?? 'user', action_id: event.actionId ?? 'accept-result', subject_digest: p.candidate_digest, at: event.at ?? state.updated_at }; next.outer.status = 'active'; next.inner = { state: 'ready', position: { action: 'finalize', skill_index: null, turn: 0, attempt: 0 } }
-      return commit(state, event, next)
+      if (state.outer.status !== 'await-user' || state.interaction?.kind !== 'result-approval' || !state.verification || state.verification.verdict !== 'pass' || state.candidate === null || state.candidate.candidate_id !== p.candidate_id || state.candidate.candidate_digest !== p.candidate_digest) fail('INVALID_ACTION', 'result is not awaiting approval, current, and passing')
+      next.verification!.approval = { actor: p.actor ?? 'user', action_id: event.actionId ?? 'accept-result', subject_digest: p.candidate_digest, at: event.at ?? state.updated_at }; next.outer.status = 'active'; next.inner = { state: 'stage-ready', position: { action: 'finalize', skill_index: null, turn: 0, attempt: 0 }, evidence: [state.candidate.file_manifest] }
+      next.interaction = null
+      return commit(state, event, next, p.comment_artifact ? [p.comment_artifact] : [])
+    }
+    case 'request-changes': {
+      if (state.outer.status !== 'await-user' || state.interaction?.kind !== 'result-approval' || !state.candidate) fail('INVALID_ACTION', 'request-changes requires the current result approval interaction')
+      if (p.candidate_id !== state.candidate.candidate_id || p.candidate_digest !== state.candidate.candidate_digest || !p.comment_artifact) fail('STALE_RESULT', 'change request must bind the current candidate and include a persisted comment')
+      next.outer.phase = p.requirements_changed ? 'shape' : 'build'
+      next.outer.status = 'active'
+      next.outer.stage_visit += 1
+      next.interaction = null
+      next.candidate = null
+      next.verification = null
+      next.finalization = { state: 'pending' }
+      if (p.requirements_changed) { next.shape = null; next.brief.confirmed = null }
+      const phase = next.outer.phase
+      next.inner = { state: 'ready', position: { action: next.workflow.stages[phase].length ? 'skill' : 'agent-work', skill_index: next.workflow.stages[phase].length ? 0 : null, turn: 0, attempt: 0 } }
+      resetStage(next, phase)
+      return commit(state, event, next, [p.comment_artifact])
     }
     case 'finalize': {
       if (!state.verification?.approval || !state.candidate || p.candidate_id !== state.candidate.candidate_id) fail('INVALID_ACTION', 'finalize requires approved current candidate')
-      next.finalization = { state: 'completed', candidate_id: state.candidate.candidate_id, candidate_digest: state.candidate.candidate_digest, artifacts: p.archive ? [{ path: p.archive, sha256: p.sha256 ?? '0'.repeat(64), bytes: p.bytes ?? 0 }] : [] }
+      if (!Array.isArray(p.artifacts) || p.artifacts.length < 5) fail('INVALID_ACTION', 'finalize requires archive, verification, delivery, knowledge, and artifact index')
+      next.finalization = { state: 'completed', candidate_id: state.candidate.candidate_id, candidate_digest: state.candidate.candidate_digest, artifacts: p.artifacts }
       next.outer.phase = 'completed'; next.outer.status = 'done'; next.inner = { state: 'idle' }
       return commit(state, event, next, next.finalization.artifacts)
     }

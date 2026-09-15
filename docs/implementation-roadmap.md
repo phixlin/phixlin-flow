@@ -627,14 +627,16 @@ M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编�
 
 目标：首个可用版本，使用 Codex 跑完整流程。
 
-#### M3 实施进度（2026-09-15）
+#### M3 实施进度（2026-09-15，重新核对）
 
 | 子里程碑 | 状态 | 证据 |
 |---|---|---|
-| M3.1 CodexRuntimeAdapter | 完成（适配器） | `src/runtime/codex.ts`、`docs/decisions/0008-codex-runtime-adapter.md`、`pnpm typecheck` |
-| M3.2 Codex Skill 调用 | 完成 | Stage Runner 注入 Skill 上下文；真实 `codex exec --json` 调用通过 |
-| M3.3 首个真实任务 | 完成 | 真实 Codex 适配器调用返回 `stage-ready` 并保存事件工件 |
-| M3.4 人工门禁、finalize 与修复 | 完成（Harness + Codex Adapter） | M2 门禁接入适配器；真实调用与事件归档通过 |
+| M3.1 CodexRuntimeAdapter | 完成 | `src/runtime/codex.ts`、output schema、退出/损坏输出映射、宿主事件工件及适配器测试 |
+| M3.2 Codex Skill 调用 | 完成 | `real-skilled-shape` 真实记录中 `grill-me`、`brainstorming` 按顺序各执行一次并保存前驱输出；Build 空 Skill 与 Verify 宿主检查已真实运行 |
+| M3.3 首个真实任务 | 完成 | `real-bugfix` 从 CLI start 运行至 `completed/done`；状态、Workflow、事件、diff、检查报告与归档由 `export-evidence` 完整导出 |
+| M3.4 人工门禁、finalize 与修复 | 完成 | `real-repair` 首轮宿主检查退出 9，Verifier 自报 pass 未覆盖失败，自动回 Build 后全量验证通过并完成；Shape/结果审批、命名 finalize 工件和整状态摘要 CAS 已接线 |
+
+M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过。三组脱敏证据位于 `docs/evidence/m3/`，扫描未发现 Authorization、Bearer、API key 或 `sk-` 值。该模式无法阻止 Codex 读取工作区内的 `.phixlin`，因此 Stage Runner 在每次外部调用后用调用前完整状态摘要检测绕过 Store 的状态改写；更强的文件系统隔离仍依赖宿主支持 `workspace-write`。
 
 #### M3.1 实现 CodexRuntimeAdapter
 
@@ -703,6 +705,16 @@ M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编�
 ### M4：可靠性和人工确认增强
 
 目标：让闭环具备实际使用所需的失败处理和人工门禁。
+
+#### M4 实施进度（2026-09-15）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M4.1 暂停、恢复和重放 | 完成 | `pause`/`resume-state`、`resume --max-steps`、主状态 history、恢复前递归工件校验及真实 CLI smoke |
+| M4.2 人工确认 | 完成 | Shape/结果摘要绑定，确认与修改意见工件，Build/Shape 受限回退，命名 finalize 工件及写入失败幂等恢复测试 |
+| M4.3 故障注入与安全边界 | 完成 | Codex 超时/非零退出/损坏输出、缺失/重复 Skill、预算上限、越界 cwd、状态篡改和敏感值脱敏测试 |
+
+M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结果或确认停止后的持久化边界提交；不能把仍在运行的进程直接标为 paused。`danger-full-access` 下无法阻止读取工作区内控制目录，现有保护会检测并拒绝绕过 Store 的状态改写；文件系统读取隔离仍需宿主支持 `workspace-write`。
 
 #### M4.1 实现暂停、恢复和重放
 

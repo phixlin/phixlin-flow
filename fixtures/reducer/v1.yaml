@@ -128,8 +128,10 @@ cases:
       type: user-answer
       payload:
         interaction_id: accept-candidate-1
-        answers:
-          - JSON
+        answer_artifact:
+          path: artifacts/user-answer.json
+          sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          bytes: 4
     then:
       outcome: commit
       patch:
@@ -284,7 +286,7 @@ cases:
       outcome: commit
       patch:
         /outer/status: active
-        /inner/state: ready
+        /inner/state: stage-ready
         /inner/position/action: finalize
 
   - id: finalize-completed
@@ -300,7 +302,12 @@ cases:
       type: finalize
       payload:
         candidate_id: candidate-1
-        archive: artifacts/final-report.md
+        artifacts:
+          - { path: artifacts/archive.json, sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, bytes: 1 }
+          - { path: artifacts/verification.md, sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, bytes: 1 }
+          - { path: artifacts/delivery.json, sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc, bytes: 1 }
+          - { path: artifacts/knowledge.md, sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd, bytes: 1 }
+          - { path: artifacts/index.json, sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, bytes: 1 }
     then:
       outcome: commit
       patch:
