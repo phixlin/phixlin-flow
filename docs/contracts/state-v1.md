@@ -1,12 +1,10 @@
-# State Protocol v1
+# 状态协议 v1
+
+本文定义 phixlin-flow 的单文件状态协议。字段名、状态值、Schema 标识和示例中的机器数据保持英文；设计说明、不变量解释和操作指引使用简体中文。
 
 > 中文说明：本文定义 v1 状态协议。字段名、状态值和 Schema 标识是机器接口，保持英文不翻译；章节说明和示例解释以简体中文为准。
 
-`phixlin.flow.v1` is the only state schema supported by the first implementation. The normative
-machine contract is [`schemas/flow-state-v1.schema.json`](../../schemas/flow-state-v1.schema.json),
-with cross-field invariants enforced by `validateChangeState`. YAML is only the storage syntax;
-duplicate keys, aliases that exceed the parser boundary, unknown properties, unknown schemas, and
-invalid field combinations fail at load time.
+首个实现只支持 `phixlin.flow.v1` 这一状态 Schema。规范机器契约见 [`schemas/flow-state-v1.schema.json`](../../schemas/flow-state-v1.schema.json)，跨字段不变量由 `validateChangeState` 强制执行。YAML 仅作为存储语法；重复键、超出解析边界的别名、未知属性、未知 Schema 以及非法字段组合会在加载时失败。
 
 ## 文件与信任边界
 
@@ -15,84 +13,66 @@ invalid field combinations fail at load time.
 <repository>/.phixlin/changes/<change-id>/       user-authored change data
   brief.md
   specs/
-  artifacts/                                     immutable evidence
-  events.jsonl                                   diagnostics only
+  artifacts/                                     不可变证据
+  events.jsonl                                   仅用于诊断
   knowledge.md
 
-<control-root>/<repository-id>/<change-id>/       outside Agent writable roots
-  flow-state.yaml                                only recovery control plane
-  mutation.lock                                  fixed inode advisory lock
-  executor.lock                                  fixed inode advisory lock
-  operations/                                    adapter input/result staging
+<control-root>/<repository-id>/<change-id>/       位于 Agent 可写根目录之外
+  flow-state.yaml                                唯一恢复控制面
+  mutation.lock                                  固定 inode advisory lock
+  executor.lock                                  固定 inode advisory lock
+  operations/                                    适配器输入/结果暂存
 ```
 
-The control root is supplied by the Harness and cannot be located under the Agent's writable
-workspace. Artifact paths in state are normalized paths below the change `artifacts/` directory;
-absolute paths, backslashes, and `..` traversal are invalid. Workflow Skill resources use paths
-relative to their `SKILL.md` and are validated while creating the Workflow snapshot.
+控制根目录由 Harness 提供，不能位于 Agent 可写工作区内。状态中的工件路径必须是 change 的 `artifacts/` 目录下的规范化路径；绝对路径、反斜杠和 `..` 遍历均非法。Workflow Skill 资源使用相对于其 `SKILL.md` 的路径，并在创建 Workflow 快照时校验。
 
 ## 字段字典
 
-| Field | Contract |
+| 字段 | 说明 |
 |---|---|
-| `schema` | Literal `phixlin.flow.v1`; unknown versions stop execution. |
-| `change_id` | Stable user-facing identifier across Shape, repairs, restarts, and completion. |
-| `state_version` | Starts at 0 and increases by exactly one for each committed mutation. |
-| `workspace` | Absolute repository root, repository identity, baseline evidence, and confirmed writable scope. |
-| `workflow` | Immutable Profile name/version/runtime/digest plus ordered, resolved Skill and resource snapshots. |
-| `outer` | Delivery `phase`, scheduling `status`, monotonic `stage_visit`, and candidate `iteration`. |
-| `inner` | The only current lifecycle position and the only in-flight `operation`, when one exists. |
-| `budget` | Current visit turns, infrastructure failures, repairs, and no-progress counters with limits. |
-| `skills` | All planned records for the current visit plus observed or reported contextual records. |
-| `stage_context` | Current revision binding, planned completion order, execution IDs, and stage evidence. |
-| `brief` | Current brief revision, digest, immutable copy, and human confirmation. |
-| `shape` | Frozen spec revision, acceptance IDs, check argv arrays, and human approval. |
-| `candidate` | Builder Handoff bound to spec, iteration, workspace digest, evidence, builder, and reviewer. |
-| `verification` | Machine checks and Verifier results bound to the current candidate and full acceptance list. |
-| `interaction` | Awaited question or approval, current binding, answers, and exact resume position. |
-| `blocker` | Error code, reason, allowed recovery actions, and exact resume position. |
-| `finalization` | Pending, prepared, or completed archive bound to the approved candidate. |
-| `history` | Ordered mutation receipts; action IDs are unique and version ranges are contiguous. |
+| `schema` | 固定为 `phixlin.flow.v1`；未知版本停止执行。 |
+| `change_id` | 在 Shape、修复、重启和完成期间保持不变的用户可见标识。 |
+| `state_version` | 从 0 开始，每次提交 mutation 恰好递增 1。 |
+| `workspace` | 仓库绝对根目录、仓库身份、基线证据和已确认的可写范围。 |
+| `workflow` | 不可变的 Profile 名称、版本、runtime、摘要，以及按顺序解析的 Skill 和资源快照。 |
+| `outer` | 交付 `phase`、调度 `status`、单调递增的 `stage_visit` 和候选 `iteration`。 |
+| `inner` | 当前唯一的生命周期位置，以及（如存在）唯一的进行中 `operation`。 |
+| `budget` | 当前 visit 的 turn、基础设施失败、修复和无进展计数及其上限。 |
+| `skills` | 当前 visit 的全部 planned 记录，以及 observed 或 reported 的 contextual 记录。 |
+| `stage_context` | 当前修订绑定、planned 完成顺序、执行 ID 和阶段证据。 |
+| `brief` | 当前 brief 修订、摘要、不可变副本和人工确认。 |
+| `shape` | 冻结的 spec 修订、验收 ID、检查命令 argv 数组和人工批准。 |
+| `candidate` | 与 spec、iteration、工作区摘要、证据、构建者和审查者绑定的 Builder Handoff。 |
+| `verification` | 与当前候选及完整验收列表绑定的机器检查和 Verifier 结果。 |
+| `interaction` | 待回答的问题或批准、当前绑定、回答和精确恢复位置。 |
+| `blocker` | 错误码、原因、允许的恢复动作和精确恢复位置。 |
+| `finalization` | 与已批准候选绑定的待处理、已准备或已完成归档。 |
+| `history` | 有序 mutation 回执；action ID 唯一，版本范围连续。 |
 
-The full structural types are exported from `src/contracts/types.ts`. Four normative examples live
-under `fixtures/state/`: `initial.yaml`, `build.yaml`, `verify.yaml`, and `completed.yaml`.
+完整结构类型从 `src/contracts/types.ts` 导出。规范示例位于 `fixtures/state/`，包括 `initial.yaml`、`build.yaml`、`verify.yaml` 和 `completed.yaml`。
 
 ## 合法组合
 
-| Outer status | Required inner state | Required side record |
+| 外层状态 | 要求的内层状态 | 要求的附加记录 |
 |---|---|---|
-| `active` | `ready`, `executing`, `reconciling`, `evaluating`, or `stage-ready` | no interaction or blocker |
-| `await-user` | `waiting-user` | matching `interaction` |
-| `paused` | any resumable or in-flight position allowed by the current phase | records preserved |
-| `blocked` | `blocked` | matching `blocker` |
-| `done` | `idle` in `completed` only | no interaction or blocker |
+| `active` | `ready`、`executing`、`reconciling`、`evaluating` 或 `stage-ready` | 不得有 interaction 或 blocker |
+| `await-user` | `waiting-user` | 匹配的 `interaction` |
+| `paused` | 当前阶段允许的任意可恢复或进行中位置 | 保留记录 |
+| `blocked` | `blocked` | 匹配的 `blocker` |
+| `done` | 仅在 `completed` 中为 `idle` | 不得有 interaction 或 blocker |
 
-Actions are phase-specific. Shape permits `skill` and `agent-work`; Build additionally permits
-`capture-candidate` and `review-candidate`; Verify permits `skill`, `run-checks`,
-`verify-candidate`, and `finalize`. `decide(state)` derives the sole next controller command from a
-validated state. `stage-ready` retains the position that produced it, so `advance` can apply the
-correct approval, capture, review, verification, or finalization guard. Agent output can request
-readiness, but only the root reducer may change the outer phase.
+动作按阶段限定。Shape 允许 `skill` 和 `agent-work`；Build 另外允许
+`capture-candidate` 和 `review-candidate`；Verify 允许 `skill`、`run-checks`、`verify-candidate` 和 `finalize`。`decide(state)` 根据已校验状态推导唯一的下一条控制器命令。`stage-ready` 会保留产生它的位置，使 `advance` 能应用正确的批准、捕获、审查、验证或归档守卫。Agent 输出可以请求就绪，但只有根 reducer 能修改外层阶段。
 
 ## 绑定不变量
 
-- `stage_context.binding` matches change ID, visit, Workflow digest, brief/spec revisions, and the
-  current candidate when Build has already captured one or Verify is consuming one.
-- An operation or interaction carries the same binding as `stage_context`.
-- Every planned Skill record matches the current phase snapshot by array index, name, and digest;
-  it must be host-observed. Contextual records cannot carry a planned index.
-- Build and later phases require confirmed Shape evidence. A candidate matches the current spec;
-  its reviewer has a separate host execution and reviews the same candidate digest.
-- Verification covers every frozen acceptance ID exactly once and matches the current candidate.
-  `pass` requires every machine check and acceptance result to pass.
-- Human Shape and result approvals bind to their subject digest. Agent execution results contain no
-  approval field. Completion requires an approved passing verification and completed archive.
+- `stage_context.binding` 必须匹配 change ID、visit、Workflow 摘要、brief/spec 修订；当 Build 已捕获候选或 Verify 正在消费候选时，还必须匹配当前候选。
+- operation 或 interaction 必须携带与 `stage_context` 相同的绑定。
+- 每条 planned Skill 记录必须按数组索引、名称和摘要匹配当前阶段快照，并且必须是 host-observed。Contextual 记录不能携带 planned 索引。
+- Build 及后续阶段要求已有确认的 Shape 证据。候选必须匹配当前 spec；审查者必须使用独立的宿主执行，并审查相同的候选摘要。
+- Verification 必须对每个冻结的验收 ID 恰好覆盖一次，并匹配当前候选。只有所有机器检查和验收结果均通过，才能为 `pass`。
+- 人工 Shape 批准和结果批准必须绑定其主题摘要。Agent 执行结果不包含 approval 字段。完成要求已批准的通过验证和已完成归档。
 
 ## 外部记录
 
-`schemas/execution-result-v1.schema.json` is the structured result passed to Codex. It deliberately
-uses the smaller response-format JSON Schema subset observed in M0; the Harness checks conditional
-and uniqueness constraints after collection. `needs-user` is the only result allowed to contain
-questions. `schemas/event-v1.schema.json` defines append-only diagnostics, which never override
-`flow-state.yaml`. `schemas/reducer-vectors-v1.schema.json` and `fixtures/reducer/v1.yaml` freeze
-the event behavior M1 must implement.
+`schemas/execution-result-v1.schema.json` 是传给 Codex 的结构化结果 Schema。它有意采用 M0 观察到的较小 response-format JSON Schema 子集；Harness 在收取后检查条件约束和唯一性约束。只有 `needs-user` 结果允许包含 questions。`schemas/event-v1.schema.json` 定义只能追加的诊断事件，永远不能覆盖 `flow-state.yaml`。`schemas/reducer-vectors-v1.schema.json` 和 `fixtures/reducer/v1.yaml` 冻结了 M1 必须实现的事件行为。

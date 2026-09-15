@@ -1,6 +1,6 @@
-# 0004 Freeze v1 state protocol and Linux advisory locking
+# 0004 冻结 v1 状态协议与 Linux advisory locking
 
-## Context
+## 背景
 
 M0 needs machine-readable contracts before the reducer and store are implemented. The main state
 must reject ambiguous YAML, invalid outer/inner combinations, stale candidate evidence, and Skill
@@ -13,7 +13,7 @@ probe rejected root `allOf`, `uniqueItems`, and `const` or `enum` declarations w
 `type`. The current nested container also prevents Codex's `workspace-write` sandbox from starting,
 although read-only structured calls work and the control directory write is denied.
 
-## Decision
+## 决策
 
 Freeze `phixlin.flow.v1` as JSON Schema 2020-12 plus explicit cross-field invariants in ordinary
 TypeScript. Parse persisted YAML with `yaml`, reject duplicate keys, and validate external data with
@@ -33,7 +33,7 @@ Treat `workspace-write` support as a required Runtime preflight. A host failure 
 Build; the Harness cannot silently switch to `danger-full-access`. The broader mode was used only
 to isolate and verify explicit Skill/resource loading in this M0 probe.
 
-## Consequences
+## 后果
 
 M1 can implement reducer and Store behavior against executable fixtures without inventing protocol
 details. Linux is the only supported Store platform until another locking decision is recorded.
