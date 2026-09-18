@@ -42,6 +42,48 @@ async function setup(fixture = 'build') {
 }
 
 describe('M2 file-backed orchestration', () => {
+  it('将 Runtime blocked 结果转为 blocker', async () => {
+    const { state, root, store, evidence } = await setup()
+    state.budget.execution_failure_limit = 1
+    await writeFile(join(root, state.change_id, 'flow-state.yaml'), stringify(state))
+    const result = await new StageRunner(store, new FakeRuntime([ready({ kind: 'blocked', summary: 'runtime failed' })]), { evidence, skills }).drive(state.change_id)
+    expect(result.state).toMatchObject({ outer: { status: 'blocked' }, blocker: { code: 'EXECUTION_FAILED' } })
+  })
+
+  it('拒绝缺少独立复审结果的 stage-ready 输出', async () => {
+    const { state, store, evidence, artifact } = await setup()
+    const runtime = new FakeRuntime([
+      ready({ candidate: { candidate_digest: artifact.sha256, file_manifest: artifact, diff: artifact, summary: 'built', addressed_acceptance_ids: ['A1'], known_limits: [] } }),
+      ready(),
+    ])
+    await expect(new StageRunner(store, runtime, { evidence, skills }).drive(state.change_id)).rejects.toThrow('review output missing')
+  })
+
+  it('在显式步数预算耗尽时返回当前决策', async () => {
+    const { state, store, evidence } = await setup()
+    const result = await new StageRunner(store, new FakeRuntime(), { evidence, skills }).drive(state.change_id, 0)
+    expect(result).toMatchObject({ steps: 0, decision: { kind: 'dispatch' } })
+  })
+
+  it.each(['missing-checks', 'check-error', 'missing-verification'] as const)('拒绝或阻断 %s Runtime 输出', async (fault) => {
+    const { state, root, store, evidence, artifact } = await setup()
+    state.budget.execution_failure_limit = 1
+    await writeFile(join(root, state.change_id, 'flow-state.yaml'), stringify(state))
+    const outcomes: (RuntimeResult | ((input: RuntimeInput) => RuntimeResult))[] = [
+      ready({ candidate: { candidate_digest: artifact.sha256, file_manifest: artifact, diff: artifact, summary: 'built', addressed_acceptance_ids: ['A1'], known_limits: [] } }),
+      (input) => ready({ review: { candidate_id: input.state.candidate!.candidate_id, candidate_digest: artifact.sha256, verdict: 'pass', report: artifact } }),
+      ready(),
+    ]
+    if (fault === 'missing-checks') outcomes.push(ready())
+    else {
+      outcomes.push((input) => ready({ checks: input.state.shape!.checks.map(({ id }) => ({ id, result: fault === 'check-error' ? 'error' : 'pass', exit_code: fault === 'check-error' ? null : 0, report: artifact })) }))
+      if (fault === 'missing-verification') outcomes.push(ready())
+    }
+    const drive = new StageRunner(store, new FakeRuntime(outcomes), { evidence, skills }).drive(state.change_id)
+    if (fault === 'check-error') expect((await drive).state.outer.status).toBe('blocked')
+    else await expect(drive).rejects.toThrow(fault === 'missing-checks' ? 'host checks missing' : 'verifier output missing')
+  })
+
   it('rechecks every acceptance item and detects a regression introduced by repair', async () => {
     const { root, state, store, evidence, artifact } = await setup()
     state.shape!.acceptance.push({ id: 'A2', text: 'preserve order', verification: 'compare order' })
