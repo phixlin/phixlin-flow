@@ -1,0 +1,11 @@
+version: 1
+name: verify-repair
+workflow: phixlin-flow-v1
+runtime: codex
+stages:
+  shape:
+    skills: []
+  build:
+    skills: []
+  verify:
+    skills: []

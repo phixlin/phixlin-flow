@@ -1,0 +1,12 @@
+{
+  "name": "standard",
+  "version": 1,
+  "workflow": "phixlin-flow-v1",
+  "runtime": "codex",
+  "digest": "dfe2939fe5618c86bd9221884676e33b895e7ba6b24b0171d45f8ded2f4d9f51",
+  "stages": {
+    "shape": [],
+    "build": [],
+    "verify": []
+  }
+}

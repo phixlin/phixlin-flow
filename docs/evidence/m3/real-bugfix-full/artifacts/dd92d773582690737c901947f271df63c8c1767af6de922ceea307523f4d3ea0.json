@@ -1,0 +1,1 @@
+在不修改工作区的前提下，后续实现应仅修复 src/math.js 中的 sum(left, right)，然后运行 npm test 验证全部测试通过，并检查 git diff --name-only 确认变更范围仅限完成该修复所需的文件。

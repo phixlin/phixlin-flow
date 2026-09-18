@@ -1,0 +1,731 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/flow-state-v1.schema.json",
+  "title": "phixlin-flow change state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "change_id",
+    "title",
+    "state_version",
+    "created_at",
+    "updated_at",
+    "workspace",
+    "workflow",
+    "outer",
+    "inner",
+    "budget",
+    "skills",
+    "stage_context",
+    "brief",
+    "shape",
+    "candidate",
+    "verification",
+    "interaction",
+    "blocker",
+    "finalization",
+    "history"
+  ],
+  "properties": {
+    "schema": { "const": "phixlin.flow.v1" },
+    "change_id": { "$ref": "#/$defs/identifier" },
+    "title": { "type": "string", "minLength": 1 },
+    "state_version": { "type": "integer", "minimum": 0 },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "workspace": { "$ref": "#/$defs/workspace" },
+    "workflow": { "$ref": "#/$defs/workflowSnapshot" },
+    "outer": { "$ref": "#/$defs/outer" },
+    "inner": { "$ref": "#/$defs/lifecycle" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/skillExecutionRecord" }
+    },
+    "stage_context": { "$ref": "#/$defs/stageContext" },
+    "brief": { "$ref": "#/$defs/brief" },
+    "shape": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/shapeSnapshot" }]
+    },
+    "candidate": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/builderHandoff" }]
+    },
+    "verification": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/verificationSnapshot" }]
+    },
+    "interaction": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/interaction" }]
+    },
+    "blocker": {
+      "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/blocker" }]
+    },
+    "finalization": { "$ref": "#/$defs/finalization" },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/transitionRecord" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 11, "pattern": "^artifacts/.+" },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "action_id", "subject_digest", "at"],
+      "properties": {
+        "actor": { "type": "string", "minLength": 1 },
+        "action_id": { "$ref": "#/$defs/identifier" },
+        "subject_digest": { "$ref": "#/$defs/digest" },
+        "at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "change_id",
+        "stage_visit",
+        "workflow_digest",
+        "brief_revision",
+        "spec_revision",
+        "candidate_id",
+        "input_digest"
+      ],
+      "properties": {
+        "change_id": { "$ref": "#/$defs/identifier" },
+        "stage_visit": { "type": "integer", "minimum": 1 },
+        "workflow_digest": { "$ref": "#/$defs/digest" },
+        "brief_revision": { "type": "integer", "minimum": 1 },
+        "spec_revision": { "type": ["integer", "null"], "minimum": 1 },
+        "candidate_id": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/identifier" }]
+        },
+        "input_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "execution_ref",
+        "binding",
+        "action",
+        "attempt",
+        "reserved_at",
+        "process"
+      ],
+      "properties": {
+        "operation_id": { "$ref": "#/$defs/identifier" },
+        "execution_ref": { "$ref": "#/$defs/identifier" },
+        "binding": { "$ref": "#/$defs/binding" },
+        "action": { "$ref": "#/$defs/action" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "reserved_at": { "$ref": "#/$defs/timestamp" },
+        "process": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["pid", "started_at"],
+              "properties": {
+                "pid": { "type": "integer", "minimum": 1 },
+                "started_at": { "$ref": "#/$defs/timestamp" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "action": {
+      "enum": [
+        "skill",
+        "agent-work",
+        "capture-candidate",
+        "review-candidate",
+        "run-checks",
+        "verify-candidate",
+        "finalize"
+      ]
+    },
+    "loopPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "skill_index", "turn", "attempt"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "skill_index": { "type": ["integer", "null"], "minimum": 0 },
+        "turn": { "type": "integer", "minimum": 0 },
+        "attempt": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "readyLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "position"],
+      "properties": {
+        "state": { "const": "ready" },
+        "position": { "$ref": "#/$defs/loopPosition" }
+      }
+    },
+    "reconcilingLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "position", "operation"],
+      "properties": {
+        "state": { "const": "reconciling" },
+        "position": { "$ref": "#/$defs/loopPosition" },
+        "operation": { "$ref": "#/$defs/operation" }
+      }
+    },
+    "stageReadyLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "position", "evidence"],
+      "properties": {
+        "state": { "const": "stage-ready" },
+        "position": { "$ref": "#/$defs/loopPosition" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactRef" },
+          "minItems": 1
+        }
+      }
+    },
+    "resumableLifecycle": {
+      "oneOf": [
+        { "$ref": "#/$defs/readyLifecycle" },
+        { "$ref": "#/$defs/reconcilingLifecycle" },
+        { "$ref": "#/$defs/stageReadyLifecycle" }
+      ]
+    },
+    "lifecycle": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state"],
+          "properties": { "state": { "const": "idle" } }
+        },
+        { "$ref": "#/$defs/readyLifecycle" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "position", "operation"],
+          "properties": {
+            "state": { "const": "executing" },
+            "position": { "$ref": "#/$defs/loopPosition" },
+            "operation": { "$ref": "#/$defs/operation" }
+          }
+        },
+        { "$ref": "#/$defs/reconcilingLifecycle" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "position", "operation", "result"],
+          "properties": {
+            "state": { "const": "evaluating" },
+            "position": { "$ref": "#/$defs/loopPosition" },
+            "operation": { "$ref": "#/$defs/operation" },
+            "result": { "$ref": "#/$defs/artifactRef" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "position", "interaction_id"],
+          "properties": {
+            "state": { "const": "waiting-user" },
+            "position": { "$ref": "#/$defs/loopPosition" },
+            "interaction_id": { "$ref": "#/$defs/identifier" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "position", "blocker_id"],
+          "properties": {
+            "state": { "const": "blocked" },
+            "position": { "$ref": "#/$defs/loopPosition" },
+            "blocker_id": { "$ref": "#/$defs/identifier" }
+          }
+        },
+        { "$ref": "#/$defs/stageReadyLifecycle" }
+      ]
+    },
+    "skillResourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/digest" },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "skillSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "digest", "resources", "source_commit"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "resources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skillResourceSnapshot" }
+        },
+        "source_commit": {
+          "type": ["string", "null"],
+          "pattern": "^[a-fA-F0-9]{7,64}$"
+        }
+      }
+    },
+    "workflowStageSnapshot": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/skillSnapshot" }
+    },
+    "workflowSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "workflow", "runtime", "digest", "stages"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "const": 1 },
+        "workflow": { "const": "phixlin-flow-v1" },
+        "runtime": { "const": "codex" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shape", "build", "verify"],
+          "properties": {
+            "shape": { "$ref": "#/$defs/workflowStageSnapshot" },
+            "build": { "$ref": "#/$defs/workflowStageSnapshot" },
+            "verify": { "$ref": "#/$defs/workflowStageSnapshot" }
+          }
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "repository", "baseline", "allowed_paths"],
+      "properties": {
+        "root": { "type": "string", "pattern": "^/" },
+        "repository": { "type": "string", "minLength": 1 },
+        "baseline": { "$ref": "#/$defs/artifactRef" },
+        "allowed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "outer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "status", "stage_visit", "iteration"],
+      "properties": {
+        "phase": { "enum": ["shape", "build", "verify", "completed"] },
+        "status": { "enum": ["active", "await-user", "paused", "blocked", "done"] },
+        "stage_visit": { "type": "integer", "minimum": 1 },
+        "iteration": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turns_used",
+        "turn_limit",
+        "execution_failures",
+        "execution_failure_limit",
+        "repairs_used",
+        "repair_limit",
+        "no_progress",
+        "no_progress_limit"
+      ],
+      "properties": {
+        "turns_used": { "type": "integer", "minimum": 0 },
+        "turn_limit": { "type": "integer", "minimum": 1 },
+        "execution_failures": { "type": "integer", "minimum": 0 },
+        "execution_failure_limit": { "type": "integer", "minimum": 1 },
+        "repairs_used": { "type": "integer", "minimum": 0 },
+        "repair_limit": { "type": "integer", "minimum": 0 },
+        "no_progress": { "type": "integer", "minimum": 0 },
+        "no_progress_limit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "skillExecutionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invocation_id",
+        "mode",
+        "index",
+        "name",
+        "source_digest",
+        "observation",
+        "status",
+        "attempts",
+        "input_digest",
+        "raw_output",
+        "artifacts",
+        "workspace_before",
+        "workspace_after",
+        "completed_by"
+      ],
+      "properties": {
+        "invocation_id": { "$ref": "#/$defs/identifier" },
+        "mode": { "enum": ["planned", "contextual"] },
+        "index": { "type": ["integer", "null"], "minimum": 0 },
+        "name": { "type": "string", "minLength": 1 },
+        "source_digest": { "$ref": "#/$defs/digest" },
+        "observation": { "enum": ["host-observed", "model-reported"] },
+        "status": { "enum": ["pending", "running", "completed", "failed"] },
+        "attempts": { "type": "integer", "minimum": 0 },
+        "input_digest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "raw_output": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactRef" }]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactRef" }
+        },
+        "workspace_before": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "workspace_after": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "completed_by": { "type": ["string", "null"] }
+      }
+    },
+    "stageContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding", "revision", "planned_completed", "execution_records", "stage_artifacts"],
+      "properties": {
+        "binding": { "$ref": "#/$defs/binding" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "planned_completed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "execution_records": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "stage_artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactRef" }
+        }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "digest", "artifact", "confirmed"],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "artifact": { "$ref": "#/$defs/artifactRef" },
+        "confirmed": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/approval" }]
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "argv", "cwd", "timeout_ms"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "cwd": { "type": "string", "minLength": 1 },
+        "timeout_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "shapeSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spec_revision", "digest", "documents", "acceptance", "checks", "approval"],
+      "properties": {
+        "spec_revision": { "type": "integer", "minimum": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "documents": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/artifactRef" }
+        },
+        "acceptance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "verification"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "text": { "type": "string", "minLength": 1 },
+              "verification": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "approval": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/approval" }]
+        }
+      }
+    },
+    "builderHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "spec_revision",
+        "iteration",
+        "candidate_digest",
+        "file_manifest",
+        "diff",
+        "builder_execution_ref",
+        "summary",
+        "addressed_acceptance_ids",
+        "known_limits",
+        "review"
+      ],
+      "properties": {
+        "candidate_id": { "$ref": "#/$defs/identifier" },
+        "spec_revision": { "type": "integer", "minimum": 1 },
+        "iteration": { "type": "integer", "minimum": 1 },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "file_manifest": { "$ref": "#/$defs/artifactRef" },
+        "diff": { "$ref": "#/$defs/artifactRef" },
+        "builder_execution_ref": { "$ref": "#/$defs/identifier" },
+        "summary": { "type": "string", "minLength": 1 },
+        "addressed_acceptance_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "known_limits": { "type": "array", "items": { "type": "string" } },
+        "review": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["execution_ref", "candidate_digest", "verdict", "report"],
+              "properties": {
+                "execution_ref": { "$ref": "#/$defs/identifier" },
+                "candidate_digest": { "$ref": "#/$defs/digest" },
+                "verdict": { "enum": ["pass", "fail"] },
+                "report": { "$ref": "#/$defs/artifactRef" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "verificationSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "candidate_digest",
+        "spec_revision",
+        "attempt",
+        "execution_ref",
+        "checks",
+        "acceptance",
+        "verdict",
+        "unresolved_ids",
+        "approval"
+      ],
+      "properties": {
+        "candidate_id": { "$ref": "#/$defs/identifier" },
+        "candidate_digest": { "$ref": "#/$defs/digest" },
+        "spec_revision": { "type": "integer", "minimum": 1 },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "execution_ref": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/identifier" }]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "result", "exit_code", "report"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "result": { "enum": ["pending", "pass", "fail", "error"] },
+              "exit_code": { "type": ["integer", "null"] },
+              "report": {
+                "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/artifactRef" }]
+              }
+            }
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "result", "reason"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "result": { "enum": ["pending", "pass", "fail"] },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "verdict": { "enum": ["pending", "pass", "fail", "blocked"] },
+        "unresolved_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "approval": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/approval" }]
+        }
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "binding", "questions", "answers", "resume"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["question", "shape-approval", "result-approval", "budget"] },
+        "binding": { "$ref": "#/$defs/binding" },
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "answers": { "type": "array", "items": { "type": "string" } },
+        "resume": { "$ref": "#/$defs/resumableLifecycle" }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "reason", "allowed_actions", "resume"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "allowed_actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "resume": { "$ref": "#/$defs/resumableLifecycle" }
+      }
+    },
+    "finalization": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state"],
+          "properties": { "state": { "const": "pending" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "candidate_id", "candidate_digest", "artifacts"],
+          "properties": {
+            "state": { "enum": ["prepared", "completed"] },
+            "candidate_id": { "$ref": "#/$defs/identifier" },
+            "candidate_digest": { "$ref": "#/$defs/digest" },
+            "artifacts": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/artifactRef" }
+            }
+          }
+        }
+      ]
+    },
+    "transitionEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "status", "inner_state"],
+      "properties": {
+        "phase": { "enum": ["shape", "build", "verify", "completed"] },
+        "status": { "enum": ["active", "await-user", "paused", "blocked", "done"] },
+        "inner_state": {
+          "enum": [
+            "idle",
+            "ready",
+            "executing",
+            "reconciling",
+            "evaluating",
+            "waiting-user",
+            "blocked",
+            "stage-ready"
+          ]
+        }
+      }
+    },
+    "transitionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "payload_digest",
+        "action",
+        "from_version",
+        "to_version",
+        "at",
+        "before",
+        "after",
+        "evidence"
+      ],
+      "properties": {
+        "action_id": { "$ref": "#/$defs/identifier" },
+        "payload_digest": { "$ref": "#/$defs/digest" },
+        "action": { "type": "string", "minLength": 1 },
+        "from_version": { "type": "integer", "minimum": 0 },
+        "to_version": { "type": "integer", "minimum": 1 },
+        "at": { "$ref": "#/$defs/timestamp" },
+        "before": { "$ref": "#/$defs/transitionEndpoint" },
+        "after": { "$ref": "#/$defs/transitionEndpoint" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactRef" }
+        }
+      }
+    }
+  }
+}

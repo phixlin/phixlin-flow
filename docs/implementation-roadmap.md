@@ -355,7 +355,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ## 10. 实施计划与验收标准
 
-按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。所有任务当前均为待实施，本文没有宣称已有可运行实现。
+按一名熟悉 Node.js 的工程师估算，自行设计并实现核心机制后，M0 至 M3 为 15–23 个工作日，M4 至 M5 为 7–11 个工作日。时间是排期参考，按验收结果放行；在 M0 完成协议与平台试验后重新估算。当前 M0.1–M0.4、M1 已完成，M0.5 在显式授权 `danger-full-access` 模式下条件完成；M2 按 Harness + Fake Runtime 边界完成，真实 Codex 与工作区执行进入 M3。
 
 | 里程碑 | 依赖 | 预计工作日 | 发布门 |
 |---|---|---:|---|
@@ -446,9 +446,32 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - 用户回答后可继续同一 Shape 轮次；Agent 不能以结果字段代替人工批准。
 - 对未验证能力列出阻塞项或明确降级方案，禁止把缺失能力标成已支持。
 
+#### M0 实施进度（2026-09-11）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M0.1 单文件状态 | 完成 | `schemas/flow-state-v1.schema.json`、四个 `fixtures/state/*.yaml`、契约测试 |
+| M0.2 CAS 协议 | 完成设计与 Linux spike | `docs/contracts/cas-v1.md`、`fixtures/cas/d01-d04.yaml`、`pnpm spike:cas` |
+| M0.3 Workflow Profile | 完成 | `schemas/workflow-profile-v1.schema.json`、快照生成器和契约测试 |
+| M0.4 CLI 与目录 | 完成契约冻结 | `docs/contracts/cli-v1.md`、事件与执行结果 Schema |
+| M0.5 Codex 能力 | 条件完成 | `docs/evidence/m0/codex-capability-report.json`、`docs/evidence/m0/codex-workspace-write-preflight.json`、`pnpm probe:codex-danger-full-access` |
+
+已在 `codex-cli 0.150.1` 验证认证、JSONL、结构化结果、needs-user/answer 往返、自建 Skill、开源子目录 Skill 和缺失资源阻塞。新增可复现 preflight：`pnpm probe:codex-workspace-write` 与 `pnpm probe:codex-danger-full-access`。当前宿主容器的 `workspace-write` 仍报 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`，同时 `unshare -Urn` 也被内核拒绝；在用户明确授权下，`danger-full-access` 写入探针已通过。Harness 仅在调用方显式选择该模式时允许它，不自动降级；因此 M0 在本机属于 danger-full-access 条件完成，workspace-write 发布门仍待兼容宿主复测。
+
 ### M1：自有状态机与内层 Loop
 
 目标：实现自己的状态解析、CAS、reducer、动作表、外部调用恢复和 Verify 修复循环，不复用参考文档中的实现代码。
+
+#### M1 实施进度（2026-09-11）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M1.1 状态 reducer | 完成 | `src/contracts/reducer.ts`、状态不变量和 reducer 行为测试 |
+| M1.2 文件 CAS Store | 完成 | `src/contracts/store.ts`、固定 inode 锁、fsync + 原子替换、actionId 幂等和并发写测试 |
+| M1.3 Stage Runner 与内层 Loop | 完成 | `src/runtime/stage-runner.ts`、reserve/dispatch/collect/evaluate 驱动和中断边界测试 |
+| M1.4 Fake Runtime 与向量 | 完成 | `src/runtime/fake.ts`、Stage Runner、repair loop 和 reducer 测试 |
+
+M1 本地发布门已通过 `pnpm check:all`。状态机、CAS、Stage Runner、Fake Runtime 和 Verify 修复回路具备自动化证据；真实 Skill 解析、候选/Handoff 产物生成和 Codex Adapter 分别属于 M2、M3。M0.5 记录的宿主 `workspace-write` sandbox 限制仍阻塞真实 Codex Build，但不再阻塞 M1 的纯状态机和 Fake Runtime 验收。
 
 #### M1.1 实现状态解析与 reducer
 
@@ -525,6 +548,20 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 - 缺失 Skill 会阻止阶段推进
 - 自建 Skill 和开源子目录 Skill 都可解析；缺少被引用的本地资源时启动失败
 
+#### M2 实施进度（2026-09-12）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M2.1 Skill Resolver | 完成 | `src/runtime/skill-resolver.ts`、`tests/contracts/skill-resolver.spec.ts`、`docs/decisions/0006-file-skill-resolver.md` |
+| M2.2 Skill Invocation | 完成（Harness） | `stage-runner.ts`、自建 outline/summarize Skills；失败重试、contextual 失败与重启后不重复执行 |
+| M2.3 确定性交接 | 完成（Harness） | `evidence.ts`、冻结输入摘要、前驱完整输出、后续保留 Skill 指令、持久化 operation envelope |
+| M2.4 Handoff 与候选 | 完成（Harness） | Shape 确认、宿主 candidate ID/摘要绑定、独立 Review、旧候选完整归档、漂移拒绝 |
+| M2.5 Verify 与修复 | 完成（Harness） | 宿主检查不可被覆盖、验收全量重置、三次修复预算、失败集合比较、规格/候选漂移路径 |
+
+本轮采用已确认的方案 A：Fake Runtime 提供候选 manifest/diff 与宿主检查结果，Harness 使用真实文件保存、重读并校验它们，不声称已执行真实工作区命令或 Codex。`tests/contracts/m2-runner.spec.ts` 验证从 Shape 确认到 Build/Review/Verify、最终等待人工确认的路径，以及提交后重启、产物损坏、过期结果和修复回归。真实工作区快照与命令采集、Codex 调用和 finalize 属于 M3；实现边界见 `docs/decisions/0007-m2-harness-orchestration.md`。
+
+M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编排、交接、证据和验证循环在 Fake Runtime 边界可恢复、可审计；不表示已经具备 M3 的真实 Codex、工作区命令执行或归档能力。
+
 #### M2.2 实现 Skill Invocation
 
 子任务：
@@ -589,6 +626,17 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 ### M3：Codex Runtime 端到端闭环
 
 目标：首个可用版本，使用 Codex 跑完整流程。
+
+#### M3 实施进度（2026-09-15，重新核对）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M3.1 CodexRuntimeAdapter | 完成 | `src/runtime/codex.ts`、output schema、退出/损坏输出映射、宿主事件工件及适配器测试 |
+| M3.2 Codex Skill 调用 | 完成 | `real-skilled-shape` 真实记录中 `grill-me`、`brainstorming` 按顺序各执行一次并保存前驱输出；Build 空 Skill 与 Verify 宿主检查已真实运行 |
+| M3.3 首个真实任务 | 完成 | `real-bugfix` 从 CLI start 运行至 `completed/done`；状态、Workflow、事件、diff、检查报告与归档由 `export-evidence` 完整导出 |
+| M3.4 人工门禁、finalize 与修复 | 完成 | `real-repair` 首轮宿主检查退出 9，Verifier 自报 pass 未覆盖失败，自动回 Build 后全量验证通过并完成；Shape/结果审批、命名 finalize 工件和整状态摘要 CAS 已接线 |
+
+M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过。三组脱敏证据位于 `docs/evidence/m3/`，扫描未发现 Authorization、Bearer、API key 或 `sk-` 值。该模式无法阻止 Codex 读取工作区内的 `.phixlin`，因此 Stage Runner 在每次外部调用后用调用前完整状态摘要检测绕过 Store 的状态改写；更强的文件系统隔离仍依赖宿主支持 `workspace-write`。
 
 #### M3.1 实现 CodexRuntimeAdapter
 
@@ -658,6 +706,16 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 目标：让闭环具备实际使用所需的失败处理和人工门禁。
 
+#### M4 实施进度（2026-09-15）
+
+| 子里程碑 | 状态 | 证据 |
+|---|---|---|
+| M4.1 暂停、恢复和重放 | 完成 | `pause`/`resume-state`、`resume --max-steps`、主状态 history、恢复前递归工件校验及真实 CLI smoke |
+| M4.2 人工确认 | 完成 | Shape/结果摘要绑定，确认与修改意见工件，Build/Shape 受限回退，命名 finalize 工件及写入失败幂等恢复测试 |
+| M4.3 故障注入与安全边界 | 完成 | Codex 超时/非零退出/损坏输出、缺失/重复 Skill、预算上限、越界 cwd、状态篡改和敏感值脱敏测试 |
+
+M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结果或确认停止后的持久化边界提交；不能把仍在运行的进程直接标为 paused。`danger-full-access` 下无法阻止读取工作区内控制目录，现有保护会检测并拒绝绕过 Store 的状态改写；文件系统读取隔离仍需宿主支持 `workspace-write`。
+
 #### M4.1 实现暂停、恢复和重放
 
 子任务：
@@ -705,6 +763,8 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 目标：在完成端到端闭环后，提升可观察性和团队使用效率。
 
+状态：已完成。`status` 已提供人工介入判断和恢复命令；审计包支持完整文件哈希与离线校验；三条本地示例、Skill 接入说明和失败恢复手册已纳入仓库。
+
 #### M5.1 运行状态查询
 
 子任务：
@@ -741,6 +801,12 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 - 新用户可以按文档运行一个本地示例
 - 示例覆盖有 Skill、无 Skill、Verify 失败三种路径
+
+实现与验收证据：
+
+- `src/operations/status.ts` 与 `tests/contracts/operations.spec.ts` 覆盖阶段、loop、Skill 进度、最近事件、人工介入和恢复命令。
+- `src/operations/evidence.ts`、`schemas/evidence-manifest-v1.schema.json` 与审计包测试覆盖完整导出、离线校验、缺失、篡改和额外文件。
+- `examples/`、`docs/guides/skill-integration.md` 与 `docs/guides/failure-recovery.md` 覆盖无 Skill、有 Skill 和 Verify 修复路径。
 
 ### M6：第二平台适配（后续）
 

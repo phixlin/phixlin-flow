@@ -1,0 +1,13 @@
+version: 1
+name: standard
+workflow: phixlin-flow-v1
+runtime: codex
+stages:
+  shape:
+    skills:
+      - local-shape
+  build:
+    skills: []
+  verify:
+    skills:
+      - test-runner

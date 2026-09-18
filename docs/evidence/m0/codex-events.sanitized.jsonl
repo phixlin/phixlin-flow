@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"<redacted>"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"<redacted>","type":"agent_message","text":"{\"artifacts\":[],\"binding\":{\"change_id\":\"m0-capability\",\"input_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"stage_visit\":1},\"kind\":\"stage-ready\",\"proposal\":null,\"questions\":[],\"schema\":\"phixlin.execution-result.v1\",\"skill_invocations\":[],\"summary\":\"Structured output probe passed\"}"}}
+{"type":"turn.completed","usage":{"input_tokens":30078,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":203,"reasoning_output_tokens":16}}

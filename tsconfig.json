@@ -5,6 +5,8 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noImplicitAny": true,
+    "types": ["node"],
+    "resolveJsonModule": true,
     "declaration": true,
     "outDir": "dist"
   },

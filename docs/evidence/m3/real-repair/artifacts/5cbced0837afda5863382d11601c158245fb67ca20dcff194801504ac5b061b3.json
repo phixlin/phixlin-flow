@@ -1,0 +1,1 @@
+独立审查通过。`src/math.js` 的唯一候选变更将 `subtract(left, right)` 从 `left + right` 修正为 `left - right`；工作区中的候选差异仅涉及该文件。已在项目根目录运行 `npm test`，2 个测试全部通过。按照 Build 阶段要求未运行宿主检查；宿主检查应留到 Verify 阶段执行。

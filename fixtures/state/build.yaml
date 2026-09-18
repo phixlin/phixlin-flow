@@ -1,0 +1,134 @@
+schema: phixlin.flow.v1
+change_id: m0-example
+title: Freeze the v1 protocol
+state_version: 1
+created_at: 2026-09-11T08:00:00Z
+updated_at: 2026-09-11T08:10:00Z
+workspace:
+  root: /workspace/example
+  repository: example
+  baseline:
+    path: artifacts/workspace-baseline.json
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 24
+  allowed_paths:
+    - src/
+    - tests/
+workflow:
+  name: standard
+  version: 1
+  workflow: phixlin-flow-v1
+  runtime: codex
+  digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  stages:
+    shape:
+      - name: local-shape
+        path: .agents/skills/local-shape/SKILL.md
+        digest: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+        resources:
+          - path: references/questions.md
+            sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+            bytes: 120
+        source_commit: null
+    build: []
+    verify:
+      - name: test-runner
+        path: vendor/openai-skills/test-runner/SKILL.md
+        digest: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        resources: []
+        source_commit: 0123456789abcdef0123456789abcdef01234567
+outer:
+  phase: build
+  status: active
+  stage_visit: 2
+  iteration: 1
+inner:
+  state: ready
+  position:
+    action: agent-work
+    skill_index: null
+    turn: 0
+    attempt: 0
+budget:
+  turns_used: 0
+  turn_limit: 20
+  execution_failures: 0
+  execution_failure_limit: 3
+  repairs_used: 0
+  repair_limit: 3
+  no_progress: 0
+  no_progress_limit: 3
+skills: []
+stage_context:
+  binding:
+    change_id: m0-example
+    stage_visit: 2
+    workflow_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    brief_revision: 1
+    spec_revision: 1
+    candidate_id: null
+    input_digest: "1111111111111111111111111111111111111111111111111111111111111111"
+  revision: 1
+  planned_completed: []
+  execution_records: []
+  stage_artifacts: []
+brief:
+  revision: 1
+  digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  artifact:
+    path: artifacts/brief-revision-1.md
+    sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    bytes: 180
+  confirmed:
+    actor: human@example.test
+    action_id: confirm-shape-1
+    subject_digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    at: 2026-09-11T08:10:00Z
+shape:
+  spec_revision: 1
+  digest: "2222222222222222222222222222222222222222222222222222222222222222"
+  documents:
+    - path: artifacts/spec-revision-1.md
+      sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+      bytes: 420
+  acceptance:
+    - id: A1
+      text: Four lifecycle fixtures validate
+      verification: pnpm test
+  checks:
+    - id: unit
+      argv:
+        - pnpm
+        - test
+      cwd: .
+      timeout_ms: 120000
+  approval:
+    actor: human@example.test
+    action_id: confirm-shape-1
+    subject_digest: "2222222222222222222222222222222222222222222222222222222222222222"
+    at: 2026-09-11T08:10:00Z
+candidate: null
+verification: null
+interaction: null
+blocker: null
+finalization:
+  state: pending
+history:
+  - action_id: confirm-shape-1
+    payload_digest: "4444444444444444444444444444444444444444444444444444444444444444"
+    action: confirm-shape
+    from_version: 0
+    to_version: 1
+    at: 2026-09-11T08:10:00Z
+    before:
+      phase: shape
+      status: await-user
+      inner_state: waiting-user
+    after:
+      phase: build
+      status: active
+      inner_state: ready
+    evidence:
+      - path: artifacts/spec-revision-1.md
+        sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+        bytes: 420

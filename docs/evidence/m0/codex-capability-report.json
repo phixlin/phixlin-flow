@@ -1,0 +1,66 @@
+{
+  "schema": "phixlin.codex-capability-report.v1",
+  "tested_at": "2026-09-11T11:38:53Z",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x64",
+    "node": "v24.19.0",
+    "codex_cli": "0.150.1"
+  },
+  "official_contract": {
+    "noninteractive": "https://developers.openai.com/codex/noninteractive/",
+    "skills": "https://developers.openai.com/codex/skills/"
+  },
+  "probes": {
+    "saved_authentication": "passed",
+    "jsonl_events": "passed",
+    "output_schema": "passed",
+    "needs_user_answer_round_trip": "passed",
+    "self_authored_skill_relative_resource": "passed-with-danger-full-access",
+    "open_source_subdirectory_skill_relative_resource": "passed-with-danger-full-access",
+    "missing_skill_resource_blocks": "passed-with-danger-full-access",
+    "control_directory_write_denied": "passed-with-workspace-write",
+    "workspace_write": "blocked"
+  },
+  "bindings": {
+    "needs_user_change_id": "m0-capability",
+    "needs_user_stage_visit": 1,
+    "answer_change_id": "m0-capability",
+    "answer_stage_visit": 1,
+    "approval_field_in_execution_schema": false
+  },
+  "skill_sources": [
+    {
+      "class": "self-authored",
+      "path": "fixtures/codex-skills/local-resource-reader/SKILL.md",
+      "sha256": "cbe7e98dad9232bcd11e63b5c0418636d655e706b79142a0486714285f9a76e1",
+      "resource": "references/token.txt",
+      "resource_sha256": "e205c6a340317174818bfa76b3bc4db67bcec2b98f087deaad2a6ac209d00119",
+      "observed_value": "LOCAL-RESOURCE-READ-OK"
+    },
+    {
+      "class": "open-source-subdirectory",
+      "repository": "https://github.com/openai/skills.git",
+      "source_commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "path": "skills/.curated/cli-creator/SKILL.md",
+      "sha256": "24058eabf0aafce6def3fb937ac93cbe3fa341c653c658dc589edb77f73d6152",
+      "resource": "references/agent-cli-patterns.md",
+      "resource_sha256": "ac11612b780a80a97b15a5ffca23b21a182f854003911cce2363dd69b6126272",
+      "observed_heading": "Codex CLI Patterns"
+    }
+  ],
+  "blockers": [
+    {
+      "capability": "workspace-write",
+      "observed_error": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+      "impact": "Codex cannot run workspace commands or apply file changes in workspace-write mode in this host container.",
+      "policy": "Do not fall back automatically. Preflight must fail before entering Build until the host supports workspace-write."
+    }
+  ],
+  "structured_output_constraints": [
+    "The Codex response-format subset rejected root allOf.",
+    "The Codex response-format subset rejected uniqueItems.",
+    "Every const or enum node required an explicit type.",
+    "Cross-field and uniqueness checks remain in the Harness validator."
+  ]
+}
