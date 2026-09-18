@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { flock } from 'fs-ext'
+import lockfile from 'proper-lockfile'
 import { parse, stringify } from 'yaml'
 import { digestJson } from './digest.js'
 import { ContractError } from './error.js'
@@ -9,7 +9,7 @@ import { reduce, type ReducerEvent } from './reducer.js'
 import { validateChangeState } from './validation.js'
 import type { ChangeState, MutationReceipt, MutationRequest, StateMutationStore } from './types.js'
 
-/** File-backed CAS store. The lock inode is never removed, so process exit releases it safely. */
+/** File-backed CAS store. Cross-process exclusion uses a bounded, stale-recoverable lock. */
 export class FileStateMutationStore implements StateMutationStore {
   constructor(
     private readonly root: string,
@@ -22,23 +22,29 @@ export class FileStateMutationStore implements StateMutationStore {
   private async withLock<T>(changeId: string, fn: () => Promise<T>): Promise<T> {
     const path = this.lockPath(changeId)
     await fs.mkdir(dirname(path), { recursive: true })
-    const fd = await fs.open(path, 'a+')
+    let release: () => Promise<void>
     try {
-      await new Promise<void>((resolve, reject) => {
-        const start = Date.now()
-        const attempt = () => {
-          flock(fd.fd, 'exnb', (error) => {
-            if (!error) return resolve()
-            if (Date.now() - start >= this.lockTimeoutMs) return reject(new ContractError('LOCK_BUSY', ['mutation lock timeout']))
-            setTimeout(attempt, 10)
-          })
-        }
-        attempt()
+      release = await lockfile.lock(path, {
+        retries: { retries: Math.max(0, Math.floor(this.lockTimeoutMs / 10)), minTimeout: 10, maxTimeout: 10 },
+        stale: Math.max(2_000, this.lockTimeoutMs * 3),
+        update: Math.max(1_000, this.lockTimeoutMs),
+        realpath: false,
       })
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ELOCKED') throw new ContractError('LOCK_BUSY', ['mutation lock timeout'])
+      throw error
+    }
+    try {
       return await fn()
     } finally {
-      try { await new Promise<void>((resolve) => flock(fd.fd, 'un', () => resolve())) } finally { await fd.close() }
+      await release()
     }
+  }
+
+  private async syncParentDirectory(path: string): Promise<void> {
+    if (process.platform === 'win32') return
+    const dir = await fs.open(dirname(path), 'r')
+    try { await dir.sync() } finally { await dir.close() }
   }
 
   async read(changeId: string): Promise<ChangeState> {
@@ -55,8 +61,7 @@ export class FileStateMutationStore implements StateMutationStore {
         await handle.writeFile(stringify(state, { aliasDuplicateObjects: false }), 'utf8')
         await handle.sync()
       } finally { await handle.close() }
-      const dir = await fs.open(dirname(path), 'r')
-      try { await dir.sync() } finally { await dir.close() }
+      await this.syncParentDirectory(path)
     })
   }
 
@@ -81,8 +86,7 @@ export class FileStateMutationStore implements StateMutationStore {
         await handle.sync()
       } finally { await handle.close() }
       await fs.rename(temp, path)
-      const dir = await fs.open(dirname(path), 'r')
-      try { await dir.sync() } finally { await dir.close() }
+      await this.syncParentDirectory(path)
       return { actionId: request.actionId, payloadDigest, previousVersion: state.state_version, stateVersion: next.state_version, replayed: false }
     })
   }

@@ -66,7 +66,7 @@ describe('FileSkillResolver', () => {
     await expect(resolver.resolve('sample')).rejects.toMatchObject({ code: 'INVALID_WORKFLOW_PROFILE' })
   })
 
-  it('拒绝资源符号链接和逃逸 root 的 Skill 符号链接', async () => {
+  it.skipIf(process.platform === 'win32')('拒绝资源符号链接和逃逸 root 的 Skill 符号链接', async () => {
     const resourceFixture = await fixture('# skill\n')
     await writeFile(join(resourceFixture.root, 'target.txt'), 'target')
     await symlink(join(resourceFixture.root, 'target.txt'), join(resourceFixture.directory, 'linked.txt'))

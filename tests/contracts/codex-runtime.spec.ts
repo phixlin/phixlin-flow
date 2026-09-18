@@ -39,7 +39,7 @@ async function executable(root: string, name: string, source: string): Promise<s
   return path
 }
 
-describe('CodexRuntimeAdapter 的宿主证据', () => {
+describe.skipIf(process.platform === 'win32')('CodexRuntimeAdapter 的宿主证据', () => {
   it('拒绝空脱敏值', async () => {
     const { root, evidence } = await setup()
     expect(() => new CodexRuntimeAdapter({ evidence, cwd: root, sensitiveValues: [''] })).toThrow('不能包含空字符串')

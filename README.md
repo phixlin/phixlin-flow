@@ -23,3 +23,5 @@ node dist/src/cli.js verify-evidence <bundle-path>
 | pnpm spike:cas | 重跑 Linux advisory lock 与原子替换 spike |
 | pnpm test:smoke | 真实入口冒烟测试 |
 | pnpm check:all | 全量本地门禁 |
+
+Windows 开发环境支持 Node.js 22、pnpm install 和 pnpm check:all，不需要 Python 或 Visual Studio C++ Build Tools。Store 使用跨平台文件锁；异常退出后的锁会在 stale 窗口后恢复。依赖 shell 可执行文件的 Codex Runtime fixture 暂不在 Windows 上运行。
