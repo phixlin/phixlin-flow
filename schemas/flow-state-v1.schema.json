@@ -333,7 +333,7 @@
       "additionalProperties": false,
       "required": ["root", "repository", "baseline", "allowed_paths"],
       "properties": {
-        "root": { "type": "string", "pattern": "^/" },
+        "root": { "type": "string", "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)" },
         "repository": { "type": "string", "minLength": 1 },
         "baseline": { "$ref": "#/$defs/artifactRef" },
         "allowed_paths": {

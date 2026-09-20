@@ -1,5 +1,5 @@
 import { readFile, readdir, stat, realpath } from 'node:fs/promises'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { ContractError } from '../contracts/error.js'
 import { sha256, digestJson } from '../contracts/digest.js'
 import type { ResolvedSkill, SkillSnapshot } from '../contracts/types.js'
@@ -14,12 +14,14 @@ const localReference = /(?:`|\]\()((?:references|scripts|assets)\/[^`)\s]+)(?:`|
 
 function isInside(root: string, candidate: string): boolean {
   const path = relative(root, candidate)
-  return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !path.startsWith('/') && !path.includes('\\'))
+  if (path === '') return true
+  if (isAbsolute(path) || path === '..' || path.startsWith(`..${sep}`)) return false
+  return sep === '\\' || !path.includes('\\')
 }
 
 function normalizedRelative(root: string, candidate: string): string {
   const path = relative(root, candidate)
-  if (!isInside(root, candidate) || path.includes('\\')) {
+  if (!isInside(root, candidate)) {
     throw new ContractError('INVALID_WORKFLOW_PROFILE', [`Skill path escapes resolver root: ${candidate}`])
   }
   return path.split(sep).join('/')

@@ -2,6 +2,7 @@
   "name": "@phixlin/phixlin-flow",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@12.4.2",
   "type": "module",
   "bin": {
     "phixlin-flow": "dist/src/cli.js"

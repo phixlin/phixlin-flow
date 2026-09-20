@@ -40,6 +40,23 @@ describe('flow state v1 contract', () => {
     )
   })
 
+  it.each([
+    'C:\\workspace\\example',
+    '\\\\server\\share\\example',
+  ])('接受跨平台绝对 workspace root：%s', (root) => {
+    const state = structuredClone(fixture('initial'))
+    state.workspace.root = root
+    expect(() => validateChangeState(state)).not.toThrow()
+  })
+
+  it.each([
+    'workspace/example',
+    'C:workspace\\example',
+    '\\workspace\\example',
+  ])('拒绝非绝对 workspace root：%s', (root) => {
+    expectInvalid((state) => { state.workspace.root = root }, 'workspace/root')
+  })
+
   it('rejects a candidate bound to an old spec revision', () => {
     expectInvalid((state) => {
       if (state.candidate !== null) state.candidate.spec_revision = 2
