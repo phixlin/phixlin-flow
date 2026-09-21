@@ -1,0 +1,3 @@
+{
+  "invalidInitArguments": "用法：phixlin init [--scope project|user]"
+}

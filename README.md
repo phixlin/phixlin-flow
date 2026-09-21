@@ -3,15 +3,20 @@ phixlin-flow 是面向编码 Agent 的、可适配多平台的确定性交付 Ha
 
 M3 Codex 真实闭环、M4 恢复增强和 M5 可运维 MVP 已完成本地验收：覆盖完整交付闭环、暂停恢复、故障边界、可操作状态查询，以及带哈希的离线审计包。真实运行证据位于 [`docs/evidence/m3/`](docs/evidence/m3/)；本地示例见 [`examples/`](examples/)；状态、CAS 和 CLI 契约见 [`docs/contracts/`](docs/contracts/)；准确进度和宿主限制见 [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md)。
 
-构建后可通过 `dist/src/cli.js` 使用入口：
+安装并构建 CLI，在目标 Git 项目初始化后启动 Codex：
 
 ```bash
+# 在本工程目录
+pnpm install
 pnpm build
-node dist/src/cli.js start <change-id> --workflow <name> --brief <path>
-node dist/src/cli.js status <change-id>
-node dist/src/cli.js export-evidence <change-id> --output <bundle-path>
-node dist/src/cli.js verify-evidence <bundle-path>
+pnpm link --global
+
+# 在目标项目目录
+phixlin init # 当前目录/.phixlin；--scope user 为用户主目录/.phixlin
+codex
 ```
+
+在 Codex 对话中输入 `$phixlin <需求文本或文档路径>`。初始化会安装 Codex 入口 Skill；Workflow 引用的业务 Skill 由 Codex 管理，需预先安装。默认 Workflow 使用 `requirements-review`。初始化作用域、示例和确认流程见 [examples/README.md](examples/README.md)。
 
 ## 命令
 

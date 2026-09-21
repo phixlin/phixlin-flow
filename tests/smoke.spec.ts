@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseChangeStateYaml } from '../src/index.js'
@@ -11,6 +12,43 @@ const roots: string[] = []
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
 
 describe('phixlin-flow 真实入口', () => {
+  it.each(['project', 'user'])('%s 级初始化后可在当前项目启动带 Skill 的工作流', async (scope) => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-init-smoke-'))
+    roots.push(root)
+    const project = join(root, 'project')
+    const user = join(root, 'user')
+    await mkdir(project)
+    await mkdir(user)
+    const env = { ...process.env, CODEX_HOME: join(root, 'unused-codex') }
+    const cli = join(root, 'cli.mjs')
+    // 隔离子进程的主目录查询，不修改宿主环境，也不访问真实用户配置。
+    await writeFile(cli, `import os from 'node:os';\nimport { syncBuiltinESMExports } from 'node:module';\nos.homedir = () => ${JSON.stringify(user)};\nsyncBuiltinESMExports();\nawait import(${JSON.stringify(pathToFileURL(resolve('dist/src/cli.js')).href)});\n`)
+    await exec(process.execPath, [cli, 'init', '--scope', scope], { cwd: project, env })
+    const configuration = join(scope === 'project' ? project : user, '.phixlin')
+    expect(await readFile(join(configuration, 'workflows/with-skills.yaml'), 'utf8')).toBe(await readFile('examples/workflows/with-skills.yaml', 'utf8'))
+    await writeFile(join(project, 'brief.md'), '# 需求\n')
+    expect(await readdir(configuration)).toEqual(['codex', 'workflows'])
+    // 未安装 Skill 时，即使 .phixlin 中存在同名文件也不能作为 Skill 来源。
+    await mkdir(join(configuration, 'skills/requirements-review'), { recursive: true })
+    await writeFile(join(configuration, 'skills/requirements-review/SKILL.md'), '# 不应加载\n')
+    await expect(exec(process.execPath, [cli, 'start', 'missing-skill', '--workflow', 'with-skills', '--brief', 'brief.md'], { cwd: project, env })).rejects.toThrow('SKILL.md not found')
+    await expect(readFile(join(project, '.phixlin/changes/missing-skill/flow-state.yaml'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const skillDirectory = join(scope === 'project' ? project : user, '.agents/skills/requirements-review')
+    await mkdir(skillDirectory, { recursive: true })
+    const skillContent = await readFile('examples/skills/requirements-review/SKILL.md', 'utf8')
+    await writeFile(join(skillDirectory, 'SKILL.md'), skillContent)
+    await exec(process.execPath, [cli, 'init', '--scope', scope], { cwd: project, env })
+    expect(await readFile(join(skillDirectory, 'SKILL.md'), 'utf8')).toBe(skillContent)
+
+    await exec(process.execPath, [cli, 'start', 'initialized', '--workflow', 'with-skills', '--brief', 'brief.md'], { cwd: project, env })
+    const state = parseChangeStateYaml(await readFile(join(project, '.phixlin/changes/initialized/flow-state.yaml'), 'utf8'))
+    expect(state.workflow.name).toBe('with-skills')
+    expect(state.workflow.runtime).toBe('codex')
+    expect(state.skills[0].name).toBe('requirements-review')
+    expect(state.inner).toMatchObject({ state: 'ready', position: { action: 'skill' } })
+    await exec(process.execPath, [cli, 'status', 'initialized'], { cwd: project, env })
+  })
+
   it('创建 change 后可从另一个进程读取状态', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phixlin-smoke-'))
     roots.push(root)

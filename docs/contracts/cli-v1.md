@@ -4,10 +4,11 @@
 
 > 中文说明：本文定义命令行与存储契约。命令名、参数名、状态值和错误码属于稳定接口，必须保持英文；其余说明面向简体中文用户和贡献者。
 
-首个二进制名称为 `phixlin-flow`。除 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
+二进制名称为 `phixlin-flow`，别名为 `phixlin`。除初始化命令和 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
 
 | 命令 | 说明 |
 |---|---|
+| `init [--scope project\|user]` | 默认初始化当前目录 `.phixlin`；用户级为 `~/.phixlin`。生成 Workflow、Codex 流程说明和对应作用域 `.agents/skills/phixlin/SKILL.md` 入口，保留已有文件。业务 Skill 由 Codex 管理。 |
 | `start <change-id> --workflow <name> --brief <path>` | 校验 Profile 及全部 Skill 资源，冻结快照，创建 change 目录和初始状态。 |
 | `status <change-id> [--json]` | 校验状态并输出阶段、loop、Skill 进度、最近事件、人工介入标记和绑定当前版本的下一命令。 |
 | `resume <change-id>` | 获取 executor lock；派发任何操作前先核对未知操作。 |
@@ -31,3 +32,5 @@
 `status` 的 `requires_user` 在 `await-user`、`blocked` 和 `paused` 时为 `true`。`next_command` 可包含 `<actor>`、`<answer-file>` 等必须由操作者替换的占位符；每次状态变化后都应重新查询，不能复用旧版本命令。`recent_events` 默认返回最后五条主状态转换。
 
 审计包 `manifest.json` 使用 `phixlin.evidence-manifest.v1`，其 `files` 覆盖状态、Workflow 和全部递归引用工件，并为每项记录 `kind`、`bytes` 和 `sha256`。manifest 不列出自身；校验时只允许 manifest 与 `files` 中的路径。该格式提供完整性检测，不提供发布者身份签名。
+
+Workflow 优先从当前项目 `.phixlin/workflows/` 加载，文件缺失时才从用户主目录 `.phixlin/workflows/` 加载。Skill 按项目 `.agents/skills/`、`.codex/skills/`、用户 `.agents/skills/`、`$CODEX_HOME/skills/`（默认 `~/.codex/skills/`）顺序解析。初始化只安装 phixlin 入口，不安装或修改业务 Skill，Workflow 仅引用已有 Skill，不读取 `.phixlin/skills/`。初始化不依赖 `CODEX_HOME`，状态仍保存在当前项目中。Codex 流程说明位于所选 `.phixlin/codex/phixlin.md`，Codex 通过对应作用域 `.agents/skills/phixlin/SKILL.md` 发现入口，以 `$phixlin <需求>` 调用。

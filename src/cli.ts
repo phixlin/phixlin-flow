@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises'
+import { readFile, access } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { parse } from 'yaml'
 import { randomUUID } from 'node:crypto'
 import { createWorkflowSnapshot } from './contracts/workflow.js'
@@ -14,6 +15,7 @@ import { StageRunner } from './runtime/stage-runner.js'
 import type { ChangeState } from './contracts/types.js'
 import { exportEvidenceBundle, verifyEvidenceBundle } from './operations/evidence.js'
 import { buildStatus, getNextAction } from './operations/status.js'
+import { initialize } from './operations/init.js'
 
 function option(args: string[], name: string, required = false): string | undefined {
   const index = args.indexOf(name)
@@ -80,8 +82,15 @@ async function start(changeId: string, args: string[]) {
   identifier(changeId, 'change-id')
   const workflowName = identifier(option(args, '--workflow', true)!, 'workflow')
   const briefPath = resolve(option(args, '--brief', true)!)
-  const profile = validateWorkflowProfile(parse(await readFile(join(repository, '.phixlin', 'workflows', `${workflowName}.yaml`), 'utf8')))
-  const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills')], repositoryRoot: repository })
+  const workflowPath = join(repository, '.phixlin', 'workflows', `${workflowName}.yaml`)
+  const userWorkflowPath = join(homedir(), '.phixlin', 'workflows', `${workflowName}.yaml`)
+  let selectedWorkflowPath = workflowPath
+  try { await access(workflowPath) } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+    selectedWorkflowPath = userWorkflowPath
+  }
+  const profile = validateWorkflowProfile(parse(await readFile(selectedWorkflowPath, 'utf8')))
+  const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills'), join(homedir(), '.agents', 'skills'), join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'skills')], repositoryRoot: repository })
   const workflow = await createWorkflowSnapshot(profile, (reference) => skills.resolve(reference))
   const changeRoot = join(changes, changeId)
   const evidence = new FileEvidenceStore(changeRoot)
@@ -112,7 +121,12 @@ async function exportEvidence(changeId: string, args: string[]) {
 
 async function main() {
   const [command, changeId, ...args] = process.argv.slice(2)
-  if (!command || !changeId) throw new Error('用法：phixlin-flow <command> <change-id> [options]')
+  if (!command) throw new Error('用法：phixlin-flow <command> [<change-id>] [options]')
+  if (command === 'init') {
+    process.stdout.write(`${JSON.stringify(await initialize(process.argv.slice(3), process.cwd(), homedir()), null, 2)}\n`)
+    return
+  }
+  if (!changeId) throw new Error('用法：phixlin-flow <command> <change-id> [options]')
   if (command === 'verify-evidence') {
     process.stdout.write(`${JSON.stringify(await verifyEvidenceBundle(changeId), null, 2)}\n`)
     return
@@ -137,7 +151,7 @@ async function main() {
       await store.mutate(changeId, { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action: 'resume-state', payload: {} })
       state = await store.read(changeId)
     }
-    const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills')], repositoryRoot: repository })
+    const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills'), join(homedir(), '.agents', 'skills'), join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'skills')], repositoryRoot: repository })
     const runtime = new CodexRuntimeAdapter({ evidence, cwd: repository, sandbox: option(args, '--sandbox') as 'workspace-write' | 'danger-full-access' | 'read-only' | undefined, sensitiveValues: await sensitiveValues(args) })
     const maxStepsValue = option(args, '--max-steps')
     const maxSteps = maxStepsValue === undefined ? 100 : Number(maxStepsValue)

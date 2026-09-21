@@ -5,7 +5,8 @@
   "packageManager": "pnpm@12.4.2",
   "type": "module",
   "bin": {
-    "phixlin-flow": "dist/src/cli.js"
+    "phixlin-flow": "dist/src/cli.js",
+    "phixlin": "dist/src/cli.js"
   },
   "engines": {
     "node": ">=22"
