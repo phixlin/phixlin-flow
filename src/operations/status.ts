@@ -16,6 +16,7 @@ function nextCommand(state: ChangeState, action: string): string | null {
   if (action === 'question') return `phixlin-flow answer ${state.change_id} --interaction ${state.interaction?.id ?? '<interaction-id>'} --body-file <answer-file> ${expected}`
   if (action === 'paused') return `phixlin-flow resume ${state.change_id} ${expected}`
   if (action === 'blocked') return state.blocker?.allowed_actions.includes('retry') ? `phixlin-flow retry ${state.change_id} ${expected}` : null
+  if (action === 'executing') return `phixlin-flow submit ${state.change_id} --operation ${state.inner.state === 'executing' ? state.inner.operation.operation_id : '<operation-id>'} --result-file <result-file> ${expected}`
   if (action === 'done') return null
   return `phixlin-flow resume ${state.change_id} ${expected}`
 }
@@ -31,6 +32,7 @@ export function buildStatus(state: ChangeState, recentLimit = 5) {
     stage_visit: state.outer.stage_visit,
     iteration: state.outer.iteration,
     loop: { state: state.inner.state, position: 'position' in state.inner ? state.inner.position : null },
+    operation: state.inner.state === 'executing' ? state.inner.operation : null,
     skills: {
       completed: planned.filter((skill) => skill.status === 'completed').length,
       total: planned.length,

@@ -4,28 +4,28 @@
 
 > 中文说明：本文定义命令行与存储契约。命令名、参数名、状态值和错误码属于稳定接口，必须保持英文；其余说明面向简体中文用户和贡献者。
 
-二进制名称为 `phixlin-flow`，别名为 `phixlin`。除初始化命令和 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
+二进制名称为 `phixlin-flow`，别名为 `phixlin`。CLI 是 Harness 控制面，不启动 Codex、Claude Code 或其他底层 Agent CLI。宿主 Agent 通过入口 Skill 调用 CLI，并按 `status` 的 `next_action` 执行阶段工作；阶段结果必须通过绑定当前 operation 的可验证交接提交。除初始化命令和 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
 
 | 命令 | 说明 |
 |---|---|
 | `init [--scope project\|user]` | 默认初始化当前目录 `.phixlin`；用户级为 `~/.phixlin`。生成 Workflow、Codex 流程说明和对应作用域 `.agents/skills/phixlin/SKILL.md` 入口，保留已有文件。业务 Skill 由 Codex 管理。 |
 | `start <change-id> --workflow <name> --brief <path>` | 校验 Profile 及全部 Skill 资源，冻结快照，创建 change 目录和初始状态。 |
 | `status <change-id> [--json]` | 校验状态并输出阶段、loop、Skill 进度、最近事件、人工介入标记和绑定当前版本的下一命令。 |
-| `resume <change-id>` | 获取 executor lock；派发任何操作前先核对未知操作。 |
+| `resume <change-id>` | 推进控制面并预留下一项 operation，返回 `input` 与待提交的 `operation`；已在执行时重读同一输入，不启动 Agent。 |
+| `submit <change-id> --operation <id> --result-file <path>` | 校验宿主提交包、采集可信证据并推进至下一项 operation 或人工门禁。 |
 | `retry <change-id>` | 人工解除允许重试的 blocker，恢复其保存位置并重置连续执行失败计数。 |
 | `pause <change-id>` | 停止后续派发并请求中断当前操作；只有收取结果或确认终止后才报告 paused。 |
 | `answer <change-id> --interaction <id> --body-file <path>` | 将回答绑定到当前交互并恢复保存的动作；不会批准阶段。 |
 | `confirm-shape <change-id> --actor <id>` | 人工操作，绑定当前 brief 和 Shape 摘要，然后开始新的 Build visit。 |
 | `accept-result <change-id> --actor <id>` | 人工操作，绑定当前通过候选的摘要，然后使 `finalize` 就绪。 |
 | `request-changes <change-id> --body-file <path>` | 使结果批准失效并返回 Build；若验收契约发生变化则返回 Shape。 |
-| `switch-workflow <change-id> --workflow <name>` | 冻结新的 Profile 快照，使候选和批准状态失效，并返回 Shape。 |
 | `history <change-id> [--json]` | 从主状态读取有序的转换回执。 |
 | `export-evidence <change-id> --output <path>` | 导出状态、Workflow 快照、事件、Handoff、报告、清单和已校验的工件索引。 |
 | `verify-evidence <bundle-path>` | 不读取项目状态，离线校验审计包的文件集合、字节数、SHA-256 和快照一致性。 |
 
-如果 Profile 缺失、阶段非法、planned Skill 重复、`SKILL.md` 缺失、引用资源缺失或 runtime 不受支持，`start` 会在创建状态前失败。Build 允许 planned Skill 列表为空，并从 `agent-work` 开始。使用 `danger-full-access` 时，控制目录没有读取隔离；Stage Runner 通过调用前完整状态摘要检测外部进程绕过 Store 的改写。
+如果 Profile 缺失、阶段非法、planned Skill 重复、`SKILL.md` 缺失、引用资源缺失或 runtime 不受支持，`start` 会在创建状态前失败。Build 允许 planned Skill 列表为空，并从 `agent-work` 开始。Stage Runner 使用调用前完整状态摘要检测绕过 Store 的控制面改写；拥有工作区写权限的宿主仍可能在流程外修改业务文件，不能据此声称已完成工作流。
 
-`resume` 支持 `--max-steps <n>` 在持久化边界停止本次驱动，并支持 `--sensitive-values-file <path>` 加载非空字符串 JSON 数组。匹配值会在 Codex stdout/stderr 写入事件工件前替换为 `[REDACTED]`。
+`resume` 在下一项宿主 operation 处返回。`status` 的 `operation` 包含当前 `operation_id`、`binding.input_digest` 和动作；`executing` 时 `next_command` 指向 `submit`。宿主把结果写成 UTF-8 JSON 文件，格式为 `{ "operation_id": "...", "state_version": 1, "input_digest": "...", "result": { "kind": "stage-ready", "summary": "...", "questions": [], "proposal": null, "shape": null, "review": null, "verification": null } }`。Shape 的 `result.shape` 应包含 `document`、`acceptance`、`checks`；Reviewer 的 `result.review` 应包含 `verdict`、`report`；Verifier 的 `result.verification` 应包含 `verdict`、`acceptance`。可选 `result.skill_invocations` 记录 `{ "name": "...", "status": "completed", "output": "..." }`，仅作为 `model-reported` contextual Skill，不代替 planned Skill 或宿主观测。提交前检查 operation 和版本；失败不允许直接跳过阶段。
 
 事件流使用 `phixlin.event.v1`，每个 change 的 `sequence` 单调递增。事件仅用于诊断：可以报告末行缺失或截断，但不能据此向前或向后推进状态。Skill 输出和适配器结果是不可变工件，名称由宿主创建的 operation 或 invocation ID 决定。控制器会先计算字节数和 SHA-256，再把引用写入状态。
 

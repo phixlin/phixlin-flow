@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Host stage semantic result v1",
+  "type": "object",
+  "required": ["kind", "summary", "questions", "proposal", "shape", "review", "verification"],
+  "properties": {
+    "kind": { "enum": ["continue", "needs-user", "stage-ready", "blocked"] },
+    "summary": { "type": "string" },
+    "questions": { "type": "array", "items": { "type": "string" } },
+    "skill_invocations": { "type": "array", "items": { "type": "object", "required": ["name", "status", "output"], "properties": { "name": { "type": "string", "minLength": 1 }, "status": { "enum": ["completed", "failed"] }, "output": { "type": "string" } }, "additionalProperties": false } },
+    "proposal": { "type": ["object", "null"], "required": ["reason", "affected_acceptance_ids", "suggested_change"], "properties": { "reason": { "type": "string" }, "affected_acceptance_ids": { "type": "array", "items": { "type": "string" } }, "suggested_change": { "type": "string" } }, "additionalProperties": false },
+    "shape": { "type": ["object", "null"], "required": ["document", "acceptance", "checks"], "properties": { "document": { "type": "string" }, "acceptance": { "type": "array", "items": { "type": "object", "required": ["id", "text", "verification"], "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "verification": { "type": "string" } }, "additionalProperties": false } }, "checks": { "type": "array", "items": { "type": "object", "required": ["id", "argv", "cwd", "timeout_ms"], "properties": { "id": { "type": "string" }, "argv": { "type": "array", "items": { "type": "string" } }, "cwd": { "type": "string" }, "timeout_ms": { "type": "integer", "minimum": 1 } }, "additionalProperties": false } } }, "additionalProperties": false },
+    "review": { "type": ["object", "null"], "required": ["verdict", "report"], "properties": { "verdict": { "enum": ["pass", "fail"] }, "report": { "type": "string" } }, "additionalProperties": false },
+    "verification": { "type": ["object", "null"], "required": ["verdict", "acceptance"], "properties": { "verdict": { "enum": ["pass", "fail"] }, "acceptance": { "type": "array", "items": { "type": "object", "required": ["id", "result", "reason"], "properties": { "id": { "type": "string" }, "result": { "enum": ["pass", "fail"] }, "reason": { "type": "string" } }, "additionalProperties": false } } }, "additionalProperties": false }
+  },
+  "additionalProperties": false
+}

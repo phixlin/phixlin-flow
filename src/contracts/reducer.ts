@@ -114,7 +114,7 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
     }
     case 'execution-result': {
       const operation = operationOf(state, p)
-      const result: ArtifactRef = typeof p.result === 'string' ? { path: p.result, sha256: p.sha256 ?? '0'.repeat(64), bytes: p.bytes ?? 0 } : p.result
+      const result: ArtifactRef = p.result
       next.inner = { state: 'evaluating', position: structuredClone(positionOf(state)), operation, result }
       return commit(state, event, next, [result])
     }
@@ -130,12 +130,12 @@ export function reduce(state: ChangeState, event: ReducerEvent): ChangeState {
       if (position.action === 'skill' && skill) skill.status = 'failed'
       if (!p.confirmed_stopped) fail('INVALID_ACTION', 'execution must be confirmed stopped')
       next.budget.execution_failures += 1
-      if (next.budget.execution_failures >= next.budget.execution_failure_limit) {
+      if (p.manual_retry === true || next.budget.execution_failures >= next.budget.execution_failure_limit) {
         const blockedPosition = position; next.outer.status = 'blocked'; next.inner = { state: 'blocked', position: blockedPosition, blocker_id: p.blocker_id ?? `execution-${state.state_version + 1}` }
         next.interaction = null
         next.blocker = { id: (next.inner as any).blocker_id, code: 'EXECUTION_FAILED', reason: p.reason ?? 'External execution failed.', allowed_actions: ['retry', 'inspect'], resume: { state: 'ready', position: blockedPosition } }
       } else next.inner = { state: 'ready', position }
-      return commit(state, event, next)
+      return commit(state, event, next, p.evidence ?? [])
     }
     case 'skill-completed': {
       const op = operationOf(state, p)

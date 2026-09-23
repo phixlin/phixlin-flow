@@ -1,10 +1,11 @@
 # 失败恢复手册
 
-先运行 `phixlin-flow status <change-id>`。`requires_user` 表示是否必须人工处理；`next_command` 是绑定当前版本和动作的建议命令。不要沿用旧 status 中的命令，版本变化后应重新查询。
+先运行 `phixlin-flow status <change-id>`。`requires_user` 表示是否必须人工处理；`next_command` 是绑定当前版本和动作的建议命令。CLI 只管理 Harness 控制面，不会启动底层 Agent CLI；宿主会话应按 `next_action` 读取 operation 输入并提交绑定结果。不要沿用旧 status 中的命令，版本变化后应重新查询。
 
 | 状态 | 处理方式 |
 |---|---|
 | `active` | 执行 `next_command` 继续推进。 |
+| `active` + `executing` | 读取当前 operation 的输入，按动作执行后使用 `submit` 提交绑定的结果；会话中断时可用 `resume` 重读输入，不创建新 operation。 |
 | `await-user` + `question` | 将回答写入文件并执行 `answer` 建议命令。 |
 | `await-user` + `shape-approval` | 审查 Shape 工件后执行 `confirm-shape`。 |
 | `await-user` + `result-approval` | 审查 Verify 报告后执行 `accept-result` 或 `request-changes`。 |
@@ -12,6 +13,6 @@
 | `blocked` | 阅读 `blocker.reason` 和 `allowed_actions`；存在 `retry` 时使用 `recovery_command`。没有恢复命令时保留现场并人工处理根因。 |
 | `done` | 无需恢复，可导出审计包。 |
 
-`RESOURCE_DRIFT` 表示状态引用的不可变工件已变化。不要覆盖原摘要或跳过校验；从可信备份恢复对应文件，或保留 change 目录并重新启动一个 change。`EXECUTION_UNKNOWN` 表示进程边界中断后无法判断外部副作用，必须先核对工作区和运行结果，再按 blocker 允许的动作处理。
+`RESOURCE_DRIFT` 表示状态引用的不可变工件已变化。不要覆盖原摘要或跳过校验；从可信备份恢复对应文件，或保留 change 目录并重新启动一个 change。`EXECUTION_UNKNOWN` 表示宿主会话中断或结果提交边界无法判断外部副作用，必须先核对工作区、operation 和运行结果，再按 blocker 允许的动作处理。没有有效 operation 结果时，不得直接将工作区修改视为阶段完成。
 
 使用 `export-evidence` 后立即运行 `verify-evidence <bundle-path>`。该命令不读取项目或 change 存储，仅使用审计包内容；删除、修改、增加文件，以及状态与 Workflow 不一致都会失败。

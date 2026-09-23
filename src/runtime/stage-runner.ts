@@ -148,7 +148,7 @@ export class StageRunner {
     return JSON.stringify({ brief: state.brief, brief_content, shape: state.shape, specifications, phase: state.outer.phase, stage_visit: state.outer.stage_visit, skill, instructions, preceding, predecessor_output, stage_artifacts, workspace: state.workspace, workspace_diff, candidate: state.candidate, verification: state.verification })
   }
 
-  async drive(changeId: string, maxSteps = 100): Promise<DriveResult> {
+  async drive(changeId: string, maxSteps = 100, dispatch = true): Promise<DriveResult> {
     let state = await this.store.read(changeId)
     let steps = 0
     while (steps++ < maxSteps) {
@@ -190,6 +190,7 @@ export class StageRunner {
         }
         return { state, decision, steps }
       }
+      if (!dispatch) return { state, decision, steps }
       const operationId = `operation-${randomUUID()}`
       if (!(await this.candidateIntact(state))) {
         state = await this.mutate(changeId, state, 'candidate-drift', {})
@@ -228,5 +229,60 @@ export class StageRunner {
     if (maxSteps === 100) throw new ContractError('INVALID_ACTION', ['stage runner exceeded 100 steps'])
     state = await this.store.read(changeId)
     return { state, decision: decide(state), steps: maxSteps }
+  }
+
+  async prepare(changeId: string): Promise<{ state: ChangeState; input: string | null }> {
+    const { state, decision } = await this.drive(changeId, 100, false)
+    if (decision.kind === 'wait' && decision.reason === 'executing') {
+      if (state.inner.state !== 'executing') throw new ContractError('INVALID_ACTION', ['operation not executing'])
+      const input = await this.skillInput(state, state.inner.position)
+      if (digestJson(input) !== state.inner.operation.binding.input_digest) throw new ContractError('RESOURCE_DRIFT', ['operation input changed after reservation'])
+      return { state, input }
+    }
+    if (decision.kind !== 'dispatch') return { state, input: null }
+    if (!(await this.candidateIntact(state))) {
+      await this.mutate(changeId, state, 'candidate-drift', {})
+      return this.prepare(changeId)
+    }
+    const position = state.inner.state === 'ready' ? state.inner.position : null
+    if (!position) throw new ContractError('INVALID_ACTION', ['dispatch requires ready state'])
+    const input = await this.skillInput(state, position)
+    const reserved = await this.mutate(changeId, state, 'reserve-operation', {
+      operation_id: `operation-${randomUUID()}`,
+      execution_ref: `execution-${randomUUID()}`,
+      input_digest: digestJson(input),
+      workspace_before: state.candidate?.candidate_digest ?? state.workspace.baseline.sha256,
+    })
+    if (position.action === 'run-checks') {
+      if (reserved.inner.state !== 'executing') throw new ContractError('INVALID_ACTION', ['machine check reservation missing'])
+      let result: RuntimeResult
+      try { result = await this.runtime.execute({ operationId: reserved.inner.operation.operation_id, executionRef: reserved.inner.operation.execution_ref, state: reserved, action: 'run-checks', skillInput: input }) }
+      catch (error) {
+        const failed = await this.mutate(changeId, reserved, 'execution-error', { operation_id: reserved.inner.operation.operation_id, confirmed_stopped: true, reason: String(error), manual_retry: true })
+        return { state: failed, input: null }
+      }
+      await this.submit(changeId, reserved, result)
+      return this.prepare(changeId)
+    }
+    return { state: reserved, input }
+  }
+
+  async submit(changeId: string, state: ChangeState, result: RuntimeResult): Promise<ChangeState> {
+    if (state.inner.state !== 'executing') throw new ContractError('INVALID_ACTION', ['operation not executing'])
+    const operation = state.inner.operation
+    if (digestJson(await this.skillInput(state, state.inner.position)) !== operation.binding.input_digest) throw new ContractError('RESOURCE_DRIFT', ['operation input changed after reservation'])
+    validateExecutionResult({ schema: 'phixlin.execution-result.v1', binding: { change_id: state.change_id, stage_visit: state.outer.stage_visit, input_digest: operation.binding.input_digest }, kind: result.kind, summary: result.summary, artifacts: result.artifacts, questions: result.questions, proposal: result.proposal, skill_invocations: result.skill_invocations ?? [] })
+    for (const artifact of result.artifacts) await this.evidence.read(artifact)
+    for (const artifact of result.shape?.documents ?? []) await this.evidence.read(artifact)
+    if (result.candidate) {
+      await this.evidence.read(result.candidate.file_manifest)
+      await this.evidence.read(result.candidate.diff)
+    }
+    if (result.review) await this.evidence.read(result.review.report)
+    for (const check of result.checks ?? []) if (check.report) await this.evidence.read(check.report)
+    for (const invocation of result.skill_invocations ?? []) if (invocation.artifact) await this.evidence.read(invocation.artifact)
+    const raw_output = await this.evidence.write(JSON.stringify(result))
+    const collected = await this.evidence.write(JSON.stringify({ operation, result: { ...result, raw_output } }))
+    return this.mutate(changeId, state, 'execution-result', { operation_id: operation.operation_id, result: collected })
   }
 }

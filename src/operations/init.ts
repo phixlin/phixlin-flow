@@ -47,7 +47,7 @@ const phixlinPrompt = `# phixlin 工作流入口
 
 每次以 status 返回的 next_action、next_command、requires_user 和 state_version 决定下一步。执行命令后重新查询 status，不复用旧版本参数。CLI 输出的工件路径相对于当前项目 .phixlin/changes/<change-id>/，需要内容时读取实际工件。
 
-- 自动动作：执行 next_command；resume 会驱动计划 Skill、实现、审查、机器验证、允许的修复和归档。不要在交互会话直接替代这些阶段，也不要递归调用 $phixlin。沿用当前会话权限边界，不自动提升 sandbox 权限。
+- 自动动作：执行 next_command；resume 仅准备下一项 operation，不启动 Codex 子进程。返回 executing 时，读取输出中的 input 和 operation，在当前会话中按该阶段的 Skill 指令执行任务；Shape 只制定规格，不修改业务文件；Build 必须等 Shape 明确批准后才实现。完成后把结构化结果写入临时 JSON 文件，执行 status 给出的 submit 命令。提交包必须包含 operation_id、当前 state_version、operation.binding.input_digest 和 result。result 包含 kind、summary、questions、proposal、shape、review、verification，未使用的字段为 null 或空数组；shape 包含 document、acceptance、checks；review 包含 verdict、report；verification 包含 verdict、acceptance。不得递归调用 $phixlin，不得在没有有效 operation 或工作流停止时直接实现。沿用当前会话权限边界，不自动提升 sandbox 权限。
 - question：读取 interaction.questions 中的问题，向用户提问；得到实际回答后写入临时文件，填入 answer 命令的占位符，再继续推进。
 - shape-approval：读取状态中 shape.documents 对应的规格工件，展示目标、范围、验收项和检查命令，等待用户明确确认；确认后才执行 confirm-shape。actor 使用用户身份；没有可用身份时向用户询问。
 - result-approval：读取候选摘要与验证报告，向用户展示实现、检查结果和已知限制，等待明确接受后才执行 accept-result，然后继续 resume 完成归档。机器验证通过不代表用户接受。

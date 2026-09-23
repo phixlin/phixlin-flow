@@ -4,7 +4,7 @@
 
 ## 1. 范围与原则
 
-首期的管理对象是一个可实施编码需求（`change`）。一个 change 有唯一的 change-id、工作区、规格、所选 Workflow Profile 和最终交付结果；一次 Agent 调用是 operation，一次进入某阶段的 loop 是 visit。MVP 不引入 run-id，也不需要兼容此前未实现的接口。控制器使用 Node.js ESM/mjs，Agent 使用 Codex。
+首期的管理对象是一个可实施编码需求（`change`）。一个 change 有唯一的 change-id、工作区、规格、所选 Workflow Profile 和最终交付结果；一次宿主 Agent operation 是一次可验证交接，一次进入某阶段的 loop 是 visit。MVP 不引入 run-id，也不需要兼容此前未实现的接口。控制器使用 Node.js ESM/mjs，具体 Agent 平台由宿主会话负责；CLI 不启动底层 Agent。
 
 确定性指给定主状态和已校验事件，得到唯一下一状态和下一动作；不指模型输出、工具执行结果或重新运行代码具有确定性。主状态之外允许存在日志和产物，但不允许存在第二套可独立推进流程的状态。
 
@@ -218,7 +218,7 @@ type TransitionRecord = {
 };
 ```
 
-`Operation` 嵌入 inner 是唯一 in-flight 权威字段，不另设副本。Interaction/Blocker.resume 是恢复位置快照，只允许 ready、reconciling 或 stage-ready。人工批准绑定待批准对象摘要。规格发生改变时增加 spec_revision，保留历史，回 Shape；change-id 不变。项目 Workflow Profile 修改只影响之后启动的 change。已启动 change 如需切换 profile，执行显式 `switch-workflow`，重新解析快照并回 Shape，使旧审批和候选失效。
+`Operation` 嵌入 inner 是唯一 in-flight 权威字段，不另设副本。Interaction/Blocker.resume 是恢复位置快照，只允许 ready、reconciling 或 stage-ready。人工批准绑定待批准对象摘要。规格发生改变时增加 spec_revision，保留历史，回 Shape；change-id 不变。项目 Workflow Profile 修改只影响之后启动的 change；当前不支持运行中切换 Profile，需保留旧 change 并创建新 change。
 
 turn、attempt 是当前动作定位；budget.turns_used 是当前 visit 消耗总量，二者不能替代。操作 ID、时间和 UUID 在事件进入 reducer 前由宿主生成，reducer 内不读时钟、不生成随机值、不访问文件系统。
 

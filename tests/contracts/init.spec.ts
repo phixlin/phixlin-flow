@@ -26,6 +26,7 @@ describe('初始化配置目录', () => {
     expect(await readdir(join(target, '.phixlin'))).toEqual(['codex', 'workflows'])
     expect(await readFile(output.workflow, 'utf8')).toBe(await readFile('examples/workflows/with-skills.yaml', 'utf8'))
     expect(await readFile(output.prompt, 'utf8')).toContain('phixlin start')
+    expect(await readFile(output.prompt, 'utf8')).toContain('不得在没有有效 operation 或工作流停止时直接实现')
     const entry = await readFile(output.entry, 'utf8')
     expect(parse(entry.split('---')[1])).toMatchObject({ name: 'phixlin', description: expect.any(String) })
     expect(await readdir(join(target, '.agents/skills'))).toEqual(['phixlin'])

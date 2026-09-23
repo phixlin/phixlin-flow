@@ -16,13 +16,13 @@ describe('root reducer M1 vectors', () => {
     const reserved = reduce(load('initial'), { type: 'reserve-operation', actionId: 'reserve-1', payload: { operation_id: 'op-1', execution_ref: 'exec-1' } })
     expect(reserved.state_version).toBe(1)
     expect(reserved.inner.state).toBe('executing')
-    const collected = reduce(reserved, { type: 'execution-result', actionId: 'collect-1', payload: { operation_id: 'op-1', result: 'artifacts/result.json' } })
+    const collected = reduce(reserved, { type: 'execution-result', actionId: 'collect-1', payload: { operation_id: 'op-1', result: artifact('result.json') } })
     expect(collected.inner.state).toBe('evaluating')
   })
 
   it('rejects a stale external result without mutating the input', () => {
     const state = load('build')
-    expect(() => reduce(state, { type: 'execution-result', payload: { operation_id: 'old', result: 'artifacts/stale.json' } })).toThrowError(
+    expect(() => reduce(state, { type: 'execution-result', payload: { operation_id: 'old', result: artifact('stale.json') } })).toThrowError(
       expect.objectContaining<Partial<ContractError>>({ code: 'INVALID_ACTION' }),
     )
     expect(state.state_version).toBe(1)
@@ -75,7 +75,7 @@ describe('root reducer M1 vectors', () => {
 
   it('记录上下文 Skill 并继续当前动作', () => {
     const reserved = reduce(load('initial'), { type: 'reserve-operation', payload: { operation_id: 'op-1', execution_ref: 'exec-1' } })
-    const collected = reduce(reserved, { type: 'execution-result', payload: { operation_id: 'op-1', result: 'artifacts/result.json' } })
+    const collected = reduce(reserved, { type: 'execution-result', payload: { operation_id: 'op-1', result: artifact('result.json') } })
     const observed = reduce(collected, { type: 'contextual-skill-observed', payload: { operation_id: 'op-1', invocation_id: 'ctx-1', name: 'context', observation: 'model-reported', status: 'completed', artifacts: [] } })
     expect(observed.skills.at(-1)).toMatchObject({ mode: 'contextual', name: 'context', completed_by: 'exec-1' })
     const continued = reduce(observed, { type: 'result-continue', payload: { operation_id: 'op-1' } })
@@ -115,7 +115,7 @@ describe('root reducer M1 vectors', () => {
     state.budget.turns_used = state.budget.turn_limit
     expect(() => reduce(state, { type: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).toThrow('turn budget exhausted')
     const reserved = reduce(load('initial'), { type: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })
-    expect(() => reduce(reserved, { type: 'execution-result', payload: { operation_id: 'stale', result: 'result.json' } })).toThrowError(expect.objectContaining({ code: 'STALE_RESULT' }))
+    expect(() => reduce(reserved, { type: 'execution-result', payload: { operation_id: 'stale', result: artifact('result.json') } })).toThrowError(expect.objectContaining({ code: 'STALE_RESULT' }))
   })
 
   it('直接完成候选采集、失败复审和通过复审', () => {
@@ -143,9 +143,9 @@ describe('root reducer M1 vectors', () => {
   })
 
   it('拒绝无 operation 或无 position 的外部结果', () => {
-    expect(() => reduce(load('initial'), { type: 'execution-result', payload: { operation_id: 'none', result: 'result.json' } })).toThrow('no operation')
+    expect(() => reduce(load('initial'), { type: 'execution-result', payload: { operation_id: 'none', result: artifact('result.json') } })).toThrow('no operation')
     const done = load('completed')
-    expect(() => reduce(done, { type: 'execution-result', payload: { operation_id: 'none', result: 'result.json' } })).toThrow('no operation')
+    expect(() => reduce(done, { type: 'execution-result', payload: { operation_id: 'none', result: artifact('result.json') } })).toThrow('no operation')
   })
 
   it.each(['idle', 'waiting-user', 'blocked'] as const)('拒绝 active/%s 这种已被校验器排除的组合', (innerState) => {

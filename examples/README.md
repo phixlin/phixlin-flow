@@ -2,6 +2,8 @@
 
 使用流程：初始化 → 启动 Codex → `$phixlin <需求>`。
 
+`phixlin-flow` 是 Harness 控制面：当前 Codex 会话读取 `$phixlin` Skill 并调用 `phixlin` CLI；CLI 管理 change、阶段、证据和审批，不会启动嵌套的 Agent。`resume` 返回 operation 和阶段输入，宿主执行后按 `status` 的 `next_command` 将结果文件交给 `submit`。未获得 Shape 审批，不执行 Build；CLI 自行执行机器检查。
+
 ## 安装与初始化
 
 在本工程源码目录安装 CLI（需要 Node.js 22+、pnpm、Git 和已登录的 Codex CLI）：
@@ -36,6 +38,8 @@ phixlin init --scope user
 ```
 
 用户级在用户主目录生成同样的结构：`~/.phixlin/` 和 `~/.agents/skills/phixlin/`。重复初始化保留已有文件并补齐缺失文件，不覆盖自定义配置。`init` 安装的 `phixlin` 是 Codex 入口 Skill，业务 Skill 的安装与更新仍由 Codex 管理。
+
+旧版本已初始化的 `.phixlin/codex/phixlin.md` 不会被 `init` 覆盖。升级后请先备份旧文件，删除旧流程说明并重新运行 `phixlin init`，确认新说明包含 `submit` 和宿主 operation 交接；自定义内容需自行迁移。
 
 ## 提交需求
 
@@ -77,7 +81,7 @@ phixlin verify-evidence ./evidence-bundle
 
 ## 当前验证范围与已知问题
 
-已通过 200 项单元测试、3 项 CLI 冒烟测试、构建及 lint；Codex CLI 0.150.1 已实际发现项目级与用户级入口。真实模型测试完成了需求文档读取、业务 Skill 执行、规格确认和文件实现，但尚未通过完整交付闭环。
+已有的 Codex CLI 0.150.1 测试确认项目级与用户级入口可以被发现；新的宿主交接协议通过 CLI 冒烟测试，尚未由真实宿主会话完成全程验收。旧子进程模型的 M3 审计记录只作为历史证据，不证明新架构的真实闭环。
 
 该次测试的规格把整个 Git 未跟踪文件列表当成新增业务文件范围，导致初始化配置和已有需求文档被误计入验收，审查反复返回 Build。流程已暂停，未接受失败结果；暂停状态审计包通过完整性校验。测试时请审阅 Shape 的范围检查是否区分已有文件与本次变更；此问题及失败收敛尚未修复。
 

@@ -1,3 +1,14 @@
 {
-  "invalidInitArguments": "用法：phixlin init [--scope project|user]"
+  "invalidInitArguments": "用法：phixlin init [--scope project|user]",
+  "hostOperationMismatch": "operation 不匹配或尚未派发",
+  "hostCheckCannotSubmit": "机器检查不能由宿主提交",
+  "hostEnvelopeInvalid": "宿主提交包格式错误",
+  "hostBindingMismatch": "宿主结果绑定与当前 operation 不匹配",
+  "hostStageMustSubmit": "阶段工作必须由宿主会话提交",
+  "hostCheckComplete": "宿主检查已完成",
+  "hostShapeMissing": "Shape 结果缺少规格",
+  "hostReviewMissing": "Review 结果缺少报告",
+  "hostVerificationMissing": "Verify 结果缺少验收结论",
+  "hostResultInvalid": "宿主结果格式错误",
+  "agentCheckForbidden": "机器检查不能启动底层 Agent CLI"
 }

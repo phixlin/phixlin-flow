@@ -4,9 +4,9 @@
 
 本文档定义 phixlin-flow 在 `native-workflow-state-machine.md` 设计参考基础上的实现路线。参考文档不是现成代码，不能直接照抄接口或假定函数存在。单文件状态、CAS 写入、内层 loop、Builder Handoff 和 Verify 修复循环必须按本项目约束重新设计、实现并用故障测试验证。详细协议见 [runtime-design.md](runtime-design.md)。
 
-首要交付目标：在 Codex CLI 平台上跑通一次完整的 `shape -> build -> verify -> completed` 流程，包括需求确认、Skill 执行、代码修改、验证、结果确认和本地知识归档。先完成真实闭环，再增强恢复与运维能力。
+首要交付目标：由宿主 Agent 会话驱动 Harness 跑通一次完整的 `shape -> build -> verify -> completed` 流程，包括需求确认、Skill 执行、代码修改、验证、结果确认和本地知识归档。先完成真实闭环，再增强恢复与运维能力。
 
-Claude Code 作为后续 Runtime Adapter，不进入首个可用版本的验收范围。
+Codex、Claude Code 等底层 Agent 由宿主会话负责；phixlin-flow 首期只定义宿主 Agent 与 Harness 的可验证交接，不在 CLI 内启动具体 Agent。
 
 ## 2. 设计原则
 
@@ -49,25 +49,31 @@ Build 没有 Skill 时也必须可执行；Shape 可以强制执行 `grill-me`�
                     +----------+-----------+
                                |
                                v
+                    +----------------------+
+                    | Host Agent Session   |
+                    | $phixlin + Skills    |
+                    +----------+-----------+
+                               |
+                    control commands/results
+                               v
 +----------------+   +---------+----------+   +-------------------+
-| mjs CLI        |-->| Native State       |-->| Codex Runtime     |
-| start/resume   |   | Machine + CAS      |   | Adapter           |
-| pause/status   |   | phases + loops     |   | codex exec        |
-+----------------+   +---------+----------+   +---------+---------+
-                               |                         |
-                               v                         v
-                    +----------+----------+   +----------+----------+
-                    | Stage Runner       |   | Skill Launcher       |
-                    | guards/checkpoints |   | local/open-source    |
-                    +----------+----------+   +----------+----------+
-                               |                         |
-                               +------------+------------+
-                                            v
-                                  +---------+----------+
-                                  | Evidence / State  |
-                                  | state + events    |
-                                  | artifacts + logs  |
-                                  +--------------------+
+| phixlin CLI    |-->| Native State       |<--| Host Handoff      |
+| control plane  |   | Machine + CAS      |   | operation input   |
+| status/approve |   | phases + loops     |   | and result        |
++----------------+   +---------+----------+   +-------------------+
+                               |
+                               v
+                    +----------+----------+
+                    | Stage Runner       |
+                    | guards/checkpoints |
+                    +----------+----------+
+                               |
+                               v
+                    +----------+----------+
+                    | Evidence / State   |
+                    | state + events     |
+                    | artifacts + logs   |
+                    +--------------------+
 ```
 
 ### 3.1 模块边界
@@ -77,7 +83,7 @@ Build 没有 Skill 时也必须可执行；Shape 可以强制执行 `grill-me`�
 | `state-machine` | 状态解析、转换守卫、CAS、版本冲突处理 |
 | `stage-runner` | 阶段内 loop、Skill 顺序、退出检查、检查点 |
 | `skill-runner` | 加载和调用已编排 Skill，记录执行结果 |
-| `codex-adapter` | 将统一调用映射到 Codex CLI/runtime |
+| `host-handoff` | 生成宿主 operation 输入，接收并校验结构化结果 |
 | `evidence-store` | 事件、日志、Skill 输出、handoff 和报告 |
 | `cli` | 创建 change、推进、暂停、恢复、审批、导出 |
 | `schemas` | Workflow Profile、状态、事件、handoff 的最小校验 |
@@ -125,7 +131,7 @@ Skill 使用既有 SKILL.md，不设计新 Manifest。名称通过本地简短�
 - 运行时名称
 - 创建时间和创建者
 
-项目 Profile 后续修改不影响已启动 change。需要切换时显式执行 `switch-workflow`，重新冻结快照、回 Shape，并使旧候选和审批失效。
+项目 Profile 后续修改不影响已启动 change。当前没有运行中切换 Workflow 的命令；需要新 Profile 时保留原 change 供审计，另行创建新 change。
 
 ### 4.2 Planned 与 Contextual Skill
 
@@ -188,39 +194,36 @@ pending | running | completed | failed
 
 grill-me、brainstorming 等分析 Skill 默认顺序调用；TDD 等持续约束 Skill 在派发时加载，其指令同时进入本阶段后续 Agent 工作上下文，避免把“加载过”误当作整个实现过程已遵循。
 
-## 6. Codex Runtime 适配
+## 6. 宿主 Agent 交接
 
-首期使用 Codex 的非交互执行能力承载自动化阶段。[官方非交互执行文档](https://developers.openai.com/codex/noninteractive/)说明 `codex exec` 支持脚本执行、显式 sandbox 配置、`--json` 事件流及 `--output-schema` 结构化最终结果（核对日期：2026-09-08）。实现时封装在 CodexRuntimeAdapter，具体 CLI 版本、参数兼容性与本机认证在 M0 实测冻结。
+首期由宿主 Agent 会话承载自动化阶段。宿主会话通过 `$phixlin` 入口调用 CLI，CLI 只负责控制面、状态、证据和门禁，不启动 `codex`、`claude` 或其他底层 Agent CLI。
 
-这些 CLI 能力不等同于稳定的原生 Skill 调用 API。首期由控制器解析 SKILL.md 和本地资源，为每个 Skill 创建专门的 Codex 调用，明确加载指令及任务输入。Skill 依赖 Claude 专属工具、不可用命令或仓库外资源时，应在启动检查中报出不兼容，不能声称所有开源 Skill 都能直接运行。
+具体宿主平台的 Skill 加载、工具权限和会话生命周期不进入 Harness 内部实现。宿主按当前 `next_action` 执行阶段工作，并通过绑定 operation 的结构化结果交回 Harness。
 
-非交互调用需要提问时输出 `needs-user` 和问题，控制器保存后进入 await-user。用户通过 answer 命令提交文本，resume 再把回答和既有产物交给同一逻辑调用。主状态恢复不依赖 Codex 会话恢复，必要时创建新会话。审批由 CLI 单独接收，绑定 state_version、规格摘要或 candidate_id；Agent 输出 confirmed 不算人工批准。
+宿主需要提问时提交 `needs-user` 和问题，控制器保存后进入 await-user。用户通过 answer 命令提交文本，宿主继续同一 change。宿主中断、结果未提交、结果未知或结果损坏时，CLI 保留可审计现场并返回明确恢复动作。审批由 CLI 单独接收，绑定 state_version、规格摘要或 candidate_id；Agent 输出 confirmed 不算人工批准。
 
 建议接口：
 
 ```ts
-interface RuntimeAdapter {
-  start(input: StartInput): Promise<ExecutionRef>;
-  runStage(input: StageInput): Promise<StageResult>;
-  runSkill(input: SkillInput): Promise<SkillResult>;
-  interrupt(ref: ExecutionRef): Promise<void>;
-  resume(input: StageInput): Promise<StageResult>;
-  collect(ref: ExecutionRef): Promise<ExecutionArtifacts>;
+interface HostHandoff {
+  reserve(input: StageInput): Promise<OperationInput>;
+  submit(input: OperationResult): Promise<CommittedState>;
+  inspect(operation: ExecutionRef): Promise<OperationStatus>;
+  recover(operation: ExecutionRef): Promise<RecoveryAction>;
 }
 ```
 
-Codex Adapter 负责：
+宿主交接边界负责：
 
-- 生成稳定的阶段提示和 Skill 提示
-- 注入当前状态、Workflow 快照和阶段交接
-- 设置最小所需 sandbox 权限
-- 捕获 JSONL 事件和最终结构化结果
-- 绑定 `execution_ref`
-- 将输出写入 evidence store
+- 生成绑定当前状态和输入摘要的 operation
+- 向宿主提供阶段提示、Skill 指令和阶段交接
+- 接收结构化结果和宿主生成的输出工件
+- 校验 `execution_ref`、状态版本和输入摘要
+- 将已验证结果写入 evidence store
 
 状态机负责：
 
-- 何时可以调用 Adapter
+- 何时可以创建或收取宿主 operation
 - Skill 是否已经执行
 - 阶段是否可以推进
 - 失败是否重试或阻塞
@@ -262,7 +265,7 @@ Shape 输出至少包括：
 -> 进入 Verify
 ```
 
-Build 允许空 Skill 列表。自行设计 Builder Handoff、候选摘要、执行引用和独立 Review 绑定。独立 Review 是内置门禁，不强制用户配置 review Skill；通过独立 Codex 调用执行，和用户编排 Skill 分开记录。
+Build 允许空 Skill 列表。自行设计 Builder Handoff、候选摘要、执行引用和独立 Review 绑定。独立 Review 是内置门禁，不强制用户配置 review Skill；宿主会话在单独的 review operation 中执行，与编排 Skill 分开记录。
 
 ### 7.3 Verify
 
@@ -346,7 +349,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 
 ### 路线 C：平台复用
 
-实现第二个 Runtime Adapter：
+实现第二个宿主 Agent 适配：
 
 - Claude Code 会话调用
 - 工具权限映射
@@ -362,7 +365,7 @@ M0 就进行真实 Codex 调用试验；M1、M2 每完成一部分即接入真�
 | M0 自有状态协议与能力试验 | 无 | 4–6 | 设计契约、reducer fixture、真实 Codex 最小调用可行 |
 | M1 自有状态机骨架 | M0 | 4–6 | 单文件 CAS、动作表、故障向量通过 |
 | M2 编排与交接 | M1 | 3–4 | 本地和开源子目录 Skill 可触发 |
-| M3 Codex 完整闭环 | M2 | 4–7 | 人工确认、真实代码变更、验证及归档全部完成 |
+| M3 宿主 Agent 完整闭环 | M2 | 重新估算 | 宿主交接、人工确认、真实代码变更、验证及归档全部完成 |
 | M4 恢复增强 | M3 | 4–6 | 故障注入矩阵通过 |
 | M5 可运维 MVP | M4 | 3–5 | 文档、诊断与审计包可独立使用 |
 | M6 Claude Code | M5 稳定后 | 另行估算 | 不阻塞首个平台发布 |
@@ -623,49 +626,49 @@ M2 Harness 发布门已通过 `pnpm check:all`。M2 的“完成”只表示编�
 - 新候选不继承上轮 passed，修复破坏其他验收项时能检出
 - D07-D10 通过真实产物绑定测试，修复进入新 visit 后重跑相应 Skill
 
-### M3：Codex Runtime 端到端闭环
+### M3：宿主 Agent 驱动的端到端闭环
 
-目标：首个可用版本，使用 Codex 跑完整流程。
+目标：首个可用版本，由宿主 Agent 按 Harness 控制面完成完整流程；CLI 不启动底层 Agent CLI。
 
-#### M3 实施进度（2026-09-15，重新核对）
+#### M3 实施进度（2026-09-23，按宿主交接模型重新核对）
 
 | 子里程碑 | 状态 | 证据 |
 |---|---|---|
-| M3.1 CodexRuntimeAdapter | 完成 | `src/runtime/codex.ts`、output schema、退出/损坏输出映射、宿主事件工件及适配器测试 |
-| M3.2 Codex Skill 调用 | 完成 | `real-skilled-shape` 真实记录中 `grill-me`、`brainstorming` 按顺序各执行一次并保存前驱输出；Build 空 Skill 与 Verify 宿主检查已真实运行 |
-| M3.3 首个真实任务 | 完成 | `real-bugfix` 从 CLI start 运行至 `completed/done`；状态、Workflow、事件、diff、检查报告与归档由 `export-evidence` 完整导出 |
-| M3.4 人工门禁、finalize 与修复 | 完成 | `real-repair` 首轮宿主检查退出 9，Verifier 自报 pass 未覆盖失败，自动回 Build 后全量验证通过并完成；Shape/结果审批、命名 finalize 工件和整状态摘要 CAS 已接线 |
+| M3.1 宿主交接协议 | CLI 已接线，真实宿主待验收 | `resume` 预留 operation 并返回输入，`submit` 校验版本/摘要和结果，CLI 冒烟覆盖断点重读及拒绝过期提交 |
+| M3.2 宿主 Skill 执行 | 控制面已接线，真实 Skill 待验收 | 入口 Skill 按 planned 顺序执行，CLI 不启动 Agent 子进程；需在真实宿主会话验证 Skill 调用 |
+| M3.3 首个真实任务 | 历史实现，需重做 | `real-bugfix` 验证的是旧的 CLI 启动 Agent 模型，不作为新架构证据 |
+| M3.4 人工门禁、finalize 与修复 | 控制面部分保留，需重做交接 | `real-repair` 的状态门禁可复用，但宿主结果交接需按新协议重新验证 |
 
-M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过。三组脱敏证据位于 `docs/evidence/m3/`，扫描未发现 Authorization、Bearer、API key 或 `sk-` 值。该模式无法阻止 Codex 读取工作区内的 `.phixlin`，因此 Stage Runner 在每次外部调用后用调用前完整状态摘要检测绕过 Store 的状态改写；更强的文件系统隔离仍依赖宿主支持 `workspace-write`。
+既有 M3 证据验证的是旧的 CLI 启动 Agent 模型，不能作为宿主交接模型的发布门。CLI 冒烟已经覆盖宿主结果交接和全阶段门禁，但真实宿主会话完整闭环尚未验收，M3 不得标记为已完成。
 
-#### M3.1 实现 CodexRuntimeAdapter
+#### M3.1 实现宿主交接协议
 
 子任务：
 
-- 封装 `codex exec`
-- 支持 workspace-write 等显式 sandbox 选项
-- 捕获 JSONL 事件
-- 获取结构化最终输出
-- 绑定 execution ref 和运行目录
+- 生成绑定当前状态和输入摘要的 operation
+- 提供宿主读取阶段输入和提交结构化结果的边界
+- 校验 change、operation、state version 和输入摘要
+- 将宿主提交的结果和相关工件写入 evidence store
+- 明确等待宿主、结果未知和失败的恢复状态
 
 验收标准：
 
-- Adapter 可以启动 Codex 并获得最终结果
-- 原始事件和最终结果都写入 evidence store
-- Codex 退出码、超时和结构化输出错误均能映射为运行状态
+- 宿主可以读取 operation 并提交当前阶段结果
+- 未绑定、过期或重复结果不能推进状态
+- 宿主中断、未提交和结果损坏均有明确状态与恢复动作
 
-#### M3.2 实现 Codex Skill 调用
+#### M3.2 实现宿主 Skill 执行
 
 子任务：
 
-- 将 Skill 名称和当前阶段上下文注入 Codex 调用
+- 将 Skill 名称和当前阶段上下文交给宿主会话
 - Shape 支持 `grill-me`、`brainstorming` 示例 Skill
 - Build 支持无 Skill
 - Verify 支持测试 Skill
 
 验收标准：
 
-- 使用示例 Workflow Profile 能观察到两个 Shape planned Skill 的实际执行记录
+- 使用示例 Workflow Profile 能观察到两个 Shape planned Skill 的实际执行记录，且由宿主会话完成
 - Build 空 Skill 时 Agent 仍能修改代码
 - Verify 产生测试报告并绑定 candidate
 
@@ -688,7 +691,7 @@ M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过�
 子任务：
 
 - 提供 answer、confirm-shape、accept-result、request-changes 最小 CLI。
-- 以独立 Codex 执行完成 Reviewer 和 Verifier；执行 ID 由控制器生成，不接受 Agent 伪造身份。
+- 由宿主 Agent 完成 Reviewer 和 Verifier；执行 ID 由控制器生成，不接受 Agent 伪造身份。
 - 必需测试由控制器运行并捕获退出码，不把 Builder 自报 passed 当测试依据。
 - 绑定候选文件摘要；验证和审批前检查候选未变化。修复后执行最终全量验证。
 - finalize 写 verification.md、交付摘要、知识条目与本地工件索引，完成后提交 completed。
@@ -699,7 +702,7 @@ M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过�
 - 人为制造一个测试失败，运行自动返回 Build 修复，重新执行该轮 Skill，最终全量验证通过。
 - 同一候选验证后发生文件修改，旧结果失效；不会沿用上轮 passed 直接完成。
 - 缺少测试报告或归档写入失败时不能 completed；可恢复后完成本地归档。
-- 无需外部 subagent API，通过顺序独立 Codex 调用完成审查和验证；不可用时阻塞，首期不降级自动通过。
+- 不依赖 Harness 启动外部 Agent CLI；宿主无法提交时阻塞，首期不降级自动通过。
 - 首个发布包包含可安装 CLI、可执行示例计划、真实成功运行与修复运行的脱敏记录。
 
 ### M4：可靠性和人工确认增强
@@ -710,11 +713,11 @@ M3 发布门已在调用方明确授权的 `danger-full-access` 模式下通过�
 
 | 子里程碑 | 状态 | 证据 |
 |---|---|---|
-| M4.1 暂停、恢复和重放 | 完成 | `pause`/`resume-state`、`resume --max-steps`、主状态 history、恢复前递归工件校验及真实 CLI smoke |
+| M4.1 暂停、恢复和重放 | 控制面完成，宿主交接待重验 | `pause`/`resume-state`、主状态 history 与工件校验可复用；宿主 operation 恢复需独立验收 |
 | M4.2 人工确认 | 完成 | Shape/结果摘要绑定，确认与修改意见工件，Build/Shape 受限回退，命名 finalize 工件及写入失败幂等恢复测试 |
-| M4.3 故障注入与安全边界 | 完成 | Codex 超时/非零退出/损坏输出、缺失/重复 Skill、预算上限、越界 cwd、状态篡改和敏感值脱敏测试 |
+| M4.3 故障注入与安全边界 | 需按新模型重做 | 宿主中断、未提交/未知结果、缺失/重复 Skill、预算上限、状态篡改和结果绑定测试 |
 
-M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结果或确认停止后的持久化边界提交；不能把仍在运行的进程直接标为 paused。`danger-full-access` 下无法阻止读取工作区内控制目录，现有保护会检测并拒绝绕过 Store 的状态改写；文件系统读取隔离仍需宿主支持 `workspace-write`。
+M4 的控制面暂停、恢复和人工审批能力已通过既有测试；旧的子进程故障矩阵不再作为新架构发布门。宿主交接协议完成后，需重新验证中断、未提交、未知结果和结果绑定。暂停只在宿主结果已收取或确认终止后的持久化边界提交；不能把未收敛的 operation 直接标为 paused。
 
 #### M4.1 实现暂停、恢复和重放
 
@@ -749,7 +752,7 @@ M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结�
 
 子任务：
 
-- Codex 超时、进程退出、输出损坏
+- 宿主会话中断、结果未提交、结果未知或结构化输出损坏
 - Skill 缺失、重复、无限 loop
 - 工作区越权和敏感日志脱敏
 
@@ -836,7 +839,7 @@ M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结�
 首个 MVP 只承诺：
 
 - 单项目、以一个可实施需求为管理单元、每个工作区串行执行
-- Codex runtime
+- 宿主 Agent runtime 与可验证 operation 交接
 - 项目级多个 Workflow Profile，change 启动时选择一个
 - 本地 Skill
 - shape/build/verify/completed，归档为 finalize 动作
@@ -858,7 +861,7 @@ M4 发布门已通过本地故障矩阵。暂停只在外部调用已收取结�
 
 ## 12. 最终完成定义
 
-当以下命令在 Codex 环境中成功完成，并生成可校验审计包时，首期目标完成：
+当以下命令由宿主 Agent 会话驱动成功完成，并生成可校验审计包时，首期目标完成：
 
 ```bash
 phixlin workflow list
@@ -879,3 +882,4 @@ phixlin export-evidence fix-login
 6. Verify 通过后可执行人工确认，并由 finalize 完成本地归档。
 7. 进程中断后能恢复且不重复已完成 planned Skill。
 8. 最终状态为 `phase: completed, status: done`，状态、Workflow 快照、Skill 输出和验证报告均可审计。
+9. phixlin CLI 不启动 Codex、Claude Code 或其他底层 Agent CLI；宿主结果必须通过绑定当前 operation 的交接协议提交。

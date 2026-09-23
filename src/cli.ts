@@ -8,7 +8,7 @@ import { createWorkflowSnapshot } from './contracts/workflow.js'
 import { digestJson } from './contracts/digest.js'
 import { FileStateMutationStore } from './contracts/store.js'
 import { validateWorkflowProfile } from './contracts/validation.js'
-import { CodexRuntimeAdapter } from './runtime/codex.js'
+import { HostRuntime } from './runtime/host.js'
 import { FileEvidenceStore } from './runtime/evidence.js'
 import { FileSkillResolver } from './runtime/skill-resolver.js'
 import { StageRunner } from './runtime/stage-runner.js'
@@ -16,6 +16,7 @@ import type { ChangeState } from './contracts/types.js'
 import { exportEvidenceBundle, verifyEvidenceBundle } from './operations/evidence.js'
 import { buildStatus, getNextAction } from './operations/status.js'
 import { initialize } from './operations/init.js'
+import messages from './i18n/zh-CN.json' with { type: 'json' }
 
 function option(args: string[], name: string, required = false): string | undefined {
   const index = args.indexOf(name)
@@ -50,14 +51,6 @@ async function verifyArtifacts(state: ChangeState, evidence: FileEvidenceStore):
   }
   collect(state)
   for (const reference of new Map(references.map((item) => [item.path, item])).values()) await evidence.read(reference)
-}
-
-async function sensitiveValues(args: string[]): Promise<string[] | undefined> {
-  const path = option(args, '--sensitive-values-file')
-  if (!path) return undefined
-  const value: unknown = JSON.parse(await readFile(resolve(path), 'utf8'))
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item.length === 0)) throw new Error('--sensitive-values-file 必须是非空字符串数组')
-  return value as string[]
 }
 
 async function mutateHuman(command: string, changeId: string, args: string[], payload: Record<string, unknown>) {
@@ -139,24 +132,38 @@ async function main() {
   else if (command === 'history') output = (await store.read(changeId)).history
   else if (command === 'export-evidence') output = await exportEvidence(changeId, args)
   else if (command === 'pause') output = await mutateHuman(command, changeId, args, {})
-  else if (command === 'resume') {
+  else if (command === 'resume' || command === 'submit') {
     let state = await store.read(changeId)
     const expectedVersion = Number(option(args, '--expected-version', true))
     const expectedAction = option(args, '--expected-action', true)
-    if (expectedVersion !== state.state_version || expectedAction !== nextAction(state)) throw new Error(`状态已变化：版本 ${state.state_version}，下一动作 ${nextAction(state)}`)
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion !== state.state_version || expectedAction !== nextAction(state)) throw new Error(`状态已变化：版本 ${state.state_version}，下一动作 ${nextAction(state)}`)
     const root = join(changes, changeId)
     const evidence = new FileEvidenceStore(root)
     await verifyArtifacts(state, evidence)
-    if (state.outer.status === 'paused') {
+    if (command === 'resume' && state.outer.status === 'paused') {
       await store.mutate(changeId, { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action: 'resume-state', payload: {} })
       state = await store.read(changeId)
     }
     const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills'), join(homedir(), '.agents', 'skills'), join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'skills')], repositoryRoot: repository })
-    const runtime = new CodexRuntimeAdapter({ evidence, cwd: repository, sandbox: option(args, '--sandbox') as 'workspace-write' | 'danger-full-access' | 'read-only' | undefined, sensitiveValues: await sensitiveValues(args) })
-    const maxStepsValue = option(args, '--max-steps')
-    const maxSteps = maxStepsValue === undefined ? 100 : Number(maxStepsValue)
-    if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) throw new Error('--max-steps 必须是正整数')
-    output = (await new StageRunner(store, runtime, { evidence, skills }).drive(changeId, maxSteps)).state
+    const runtime = new HostRuntime({ evidence, cwd: repository })
+    const runner = new StageRunner(store, runtime, { evidence, skills })
+    if (command === 'submit') {
+      if (state.inner.state !== 'executing' || state.inner.operation.operation_id !== option(args, '--operation', true)) throw new Error(messages.hostOperationMismatch)
+      if (state.inner.position.action === 'run-checks') throw new Error(messages.hostCheckCannotSubmit)
+      const submitted: unknown = JSON.parse(await readFile(resolve(option(args, '--result-file', true)!), 'utf8'))
+      if (!submitted || typeof submitted !== 'object') throw new Error(messages.hostEnvelopeInvalid)
+      const envelope = submitted as Record<string, unknown>
+      if (envelope.operation_id !== state.inner.operation.operation_id || envelope.state_version !== state.state_version || envelope.input_digest !== state.inner.operation.binding.input_digest) throw new Error(messages.hostBindingMismatch)
+      const result = await runtime.bindResult({ operationId: state.inner.operation.operation_id, executionRef: state.inner.operation.execution_ref, state, action: state.inner.position.action }, envelope.result)
+      if (result.kind === 'blocked') {
+        await store.mutate(changeId, { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action: 'execution-error', payload: { operation_id: state.inner.operation.operation_id, confirmed_stopped: true, reason: result.summary, manual_retry: true, evidence: result.artifacts } })
+        output = buildStatus(await store.read(changeId))
+      } else await runner.submit(changeId, state, result)
+    }
+    if (!output) {
+      const prepared = await runner.prepare(changeId)
+      output = { ...buildStatus(prepared.state), input: prepared.input }
+    }
   } else if (command === 'answer') {
     const body = await readFile(resolve(option(args, '--body-file', true)!), 'utf8')
     const answerArtifact = await new FileEvidenceStore(join(changes, changeId)).write(body)
