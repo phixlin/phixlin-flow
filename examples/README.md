@@ -9,8 +9,10 @@
 ```bash
 pnpm install
 pnpm build
-pnpm link --global
+pnpm add --global .
 ```
+
+在目标项目启动 Codex 前，确认终端能找到 CLI：PowerShell 执行 `Get-Command phixlin`，bash 执行 `command -v phixlin`。若找不到，运行 `pnpm setup` 并重新打开终端，返回本工程源码目录重新执行 `pnpm add --global .`；已打开的 Codex 会话也需重启。
 
 进入目标 Git 项目，选择一种作用域初始化：
 

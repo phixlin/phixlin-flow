@@ -9,12 +9,18 @@ M3 Codex 真实闭环、M4 恢复增强和 M5 可运维 MVP 已完成本地验�
 # 在本工程目录
 pnpm install
 pnpm build
-pnpm link --global
+pnpm add --global .
+```
 
+安装后先确认终端能找到 `phixlin`（PowerShell：`Get-Command phixlin`；bash：`command -v phixlin`）。若全局目录未加入 `PATH`，先运行 `pnpm setup` 并重新打开终端，返回本工程目录重新执行 `pnpm add --global .`。
+
+```bash
 # 在目标项目目录
 phixlin init # 当前目录/.phixlin；--scope user 为用户主目录/.phixlin
 codex
 ```
+
+已启动的 Codex 会话需重启，以继承更新后的 `PATH`。
 
 在 Codex 对话中输入 `$phixlin <需求文本或文档路径>`。初始化会安装 Codex 入口 Skill；Workflow 引用的业务 Skill 由 Codex 管理，需预先安装。默认 Workflow 使用 `requirements-review`。初始化作用域、示例和确认流程见 [examples/README.md](examples/README.md)。
 
