@@ -13,6 +13,17 @@ const validate = ajv.compile(hostResultSchema)
 
 export interface HostRuntimeOptions { evidence: FileEvidenceStore; cwd: string }
 
+export interface HostSemanticResult {
+  kind: RuntimeResult['kind']
+  summary: string
+  questions: string[]
+  proposal: RuntimeResult['proposal']
+  skill_invocations?: { name: string; status: 'completed' | 'failed'; output: string }[]
+  shape: { document: string; acceptance: NonNullable<RuntimeResult['shape']>['acceptance']; checks: NonNullable<RuntimeResult['shape']>['checks'] } | null
+  review: { verdict: 'pass' | 'fail'; report: string } | null
+  verification: { verdict: 'pass' | 'fail'; acceptance: NonNullable<RuntimeResult['verification']>['acceptance'] } | null
+}
+
 /** 仅采集工作区与运行机器检查；阶段语义结果由宿主会话提交。 */
 export class HostRuntime implements RuntimeAdapter {
   constructor(private readonly options: HostRuntimeOptions) {}
@@ -35,13 +46,7 @@ export class HostRuntime implements RuntimeAdapter {
 
   async bindResult(input: RuntimeInput, submitted: unknown): Promise<RuntimeResult> {
     if (!validate(submitted)) throw new Error(`${messages.hostResultInvalid}：${ajv.errorsText(validate.errors)}`)
-    const value = submitted as {
-      kind: RuntimeResult['kind']; summary: string; questions: string[]; proposal: RuntimeResult['proposal']
-      skill_invocations?: { name: string; status: 'completed' | 'failed'; output: string }[]
-      shape: { document: string; acceptance: NonNullable<RuntimeResult['shape']>['acceptance']; checks: NonNullable<RuntimeResult['shape']>['checks'] } | null
-      review: { verdict: 'pass' | 'fail'; report: string } | null
-      verification: { verdict: 'pass' | 'fail'; acceptance: NonNullable<RuntimeResult['verification']>['acceptance'] } | null
-    }
+    const value = submitted as unknown as HostSemanticResult
     if (value.kind === 'stage-ready') {
       if (input.action === 'agent-work' && input.state.outer.phase === 'shape' && !value.shape) throw new Error(messages.hostShapeMissing)
       if (input.action === 'review-candidate' && !value.review) throw new Error(messages.hostReviewMissing)

@@ -37,6 +37,8 @@ phixlin init --scope user
 .agents/skills/phixlin/SKILL.md
 ```
 
+项目级 `.phixlin/workflows/`、`.phixlin/codex/` 和 `.agents/skills/phixlin/` 是可审阅的配置与入口，建议纳入 Git；`.phixlin/changes/` 只保存运行时状态、证据和临时产物，已由项目 `.gitignore` 忽略。
+
 用户级在用户主目录生成同样的结构：`~/.phixlin/` 和 `~/.agents/skills/phixlin/`。重复初始化保留已有文件并补齐缺失文件，不覆盖自定义配置。`init` 安装的 `phixlin` 是 Codex 入口 Skill，业务 Skill 的安装与更新仍由 Codex 管理。
 
 旧版本已初始化的 `.phixlin/codex/phixlin.md` 不会被 `init` 覆盖。升级后请先备份旧文件，删除旧流程说明并重新运行 `phixlin init`，确认新说明包含 `submit` 和宿主 operation 交接；自定义内容需自行迁移。
@@ -86,3 +88,28 @@ phixlin verify-evidence ./evidence-bundle
 该次测试的规格把整个 Git 未跟踪文件列表当成新增业务文件范围，导致初始化配置和已有需求文档被误计入验收，审查反复返回 Build。流程已暂停，未接受失败结果；暂停状态审计包通过完整性校验。测试时请审阅 Shape 的范围检查是否区分已有文件与本次变更；此问题及失败收敛尚未修复。
 
 当前测试宿主的 workspace-write 模式存在 bwrap 权限错误；真实模型测试是在用户明确授权 danger-full-access 后执行的。普通使用保留默认权限策略，无需照搬测试权限设置。
+
+### 宿主结果提交格式
+
+`submit --result-file` 接受一个 `phixlin.host-envelope.v1` JSON 文件。`schema`、`operation_id`、`state_version` 和 `input_digest` 必须来自当前 `status` 输出；`result` 是阶段语义结果。示例：
+
+```json
+{
+  "schema": "phixlin.host-envelope.v1",
+  "operation_id": "operation-123",
+  "state_version": 3,
+  "input_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "result": {
+    "kind": "stage-ready",
+    "summary": "实现完成",
+    "questions": [],
+    "proposal": null,
+    "shape": null,
+    "review": null,
+    "verification": null,
+    "skill_invocations": []
+  }
+}
+```
+
+`operation_id`、`state_version` 或 `input_digest` 不匹配当前 operation 时，CLI 会分别报告期望值和收到的值。`result.skill_invocations[].output` 是宿主提交的文本；CLI 会将它写入证据并转换为内部 artifact 引用。

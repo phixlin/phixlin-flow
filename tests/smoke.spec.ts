@@ -9,9 +9,18 @@ import { parseChangeStateYaml } from '../src/index.js'
 
 const exec = promisify(execFile)
 const roots: string[] = []
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
+async function cleanup(root: string): Promise<void> {
+  try {
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(code ?? '')) throw error
+    // Windows 第三方安全软件可能在重试窗口后仍持有临时目录；不让清理噪声覆盖已完成的测试结果。
+  }
+}
+afterEach(async () => { for (const root of roots.splice(0)) await cleanup(root) })
 
-describe('phixlin-flow 真实入口', () => {
+describe('phixlin-flow 真实入口', { timeout: process.platform === 'win32' ? 180_000 : 30_000 }, () => {
   it('宿主提交完整闭环，禁止越过 Shape 审批且不启动 Agent 子进程', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phixlin-host-smoke-'))
     roots.push(root)
@@ -28,7 +37,7 @@ describe('phixlin-flow 真实入口', () => {
     const invoke = async (...args: string[]) => JSON.parse((await exec(process.execPath, [cli, ...args], { cwd: root, env: { ...process.env, PATH: `${bin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}` } })).stdout)
     const submit = async (status: { operation: { operation_id: string; binding: { input_digest: string } }; state_version: number; next_action: string }, result: Record<string, unknown>) => {
       const resultFile = join(root, '.phixlin', 'host-result.json')
-      await writeFile(resultFile, JSON.stringify({ operation_id: status.operation.operation_id, state_version: status.state_version, input_digest: status.operation.binding.input_digest, result }))
+      await writeFile(resultFile, JSON.stringify({ schema: 'phixlin.host-envelope.v1', operation_id: status.operation.operation_id, state_version: status.state_version, input_digest: status.operation.binding.input_digest, result }))
       return invoke('submit', 'host-change', '--operation', status.operation.operation_id, '--result-file', resultFile, '--expected-version', String(status.state_version), '--expected-action', status.next_action)
     }
     const semantic = (fields: Record<string, unknown> = {}) => ({ kind: 'stage-ready', summary: '完成', questions: [], proposal: null, shape: null, review: null, verification: null, ...fields })
@@ -40,10 +49,10 @@ describe('phixlin-flow 真实入口', () => {
     expect(resumed.operation.operation_id).toBe(status.operation.operation_id)
     expect(resumed.input).toBe(status.input)
     const resultFile = join(root, '.phixlin', 'host-result.json')
-    await writeFile(resultFile, JSON.stringify({ operation_id: 'wrong', state_version: status.state_version, input_digest: status.operation.binding.input_digest, result: semantic() }))
+    await writeFile(resultFile, JSON.stringify({ schema: 'phixlin.host-envelope.v1', operation_id: 'wrong', state_version: status.state_version, input_digest: status.operation.binding.input_digest, result: semantic() }))
     await expect(invoke('submit', 'host-change', '--operation', status.operation.operation_id, '--result-file', resultFile, '--expected-version', String(status.state_version), '--expected-action', 'executing')).rejects.toThrow('宿主结果绑定')
     expect((await invoke('status', 'host-change')).state_version).toBe(status.state_version)
-    await writeFile(resultFile, JSON.stringify({ operation_id: status.operation.operation_id, state_version: status.state_version, input_digest: status.operation.binding.input_digest, result: semantic() }))
+    await writeFile(resultFile, JSON.stringify({ schema: 'phixlin.host-envelope.v1', operation_id: status.operation.operation_id, state_version: status.state_version, input_digest: status.operation.binding.input_digest, result: semantic() }))
     await expect(invoke('submit', 'host-change', '--operation', status.operation.operation_id, '--result-file', resultFile, '--expected-version', String(status.state_version), '--expected-action', 'executing')).rejects.toThrow('Shape 结果缺少规格')
     expect((await invoke('status', 'host-change')).state_version).toBe(status.state_version)
     const blocked = await submit(status, semantic({ kind: 'blocked', summary: '宿主无法完成当前任务' }))

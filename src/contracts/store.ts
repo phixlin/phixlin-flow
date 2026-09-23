@@ -11,6 +11,29 @@ import type { ChangeState, MutationReceipt, MutationRequest, StateMutationStore 
 import type { LockOptions } from 'proper-lockfile'
 
 type AcquireLock = (file: string, options: LockOptions) => Promise<() => Promise<void>>
+type ReplaceFile = (source: string, target: string) => Promise<void>
+
+const windowsRetryCodes = new Set(['EACCES', 'EBUSY', 'EPERM'])
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+async function retryWindowsOperation(operation: () => Promise<void>, operationName: string, attempts = 5): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await operation()
+      return
+    } catch (error: unknown) {
+      lastError = error
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      if (process.platform !== 'win32' || !windowsRetryCodes.has(code ?? '') || attempt === attempts - 1) throw error
+      await delay(25 * (attempt + 1))
+    }
+  }
+  throw new Error(`${operationName} failed`, { cause: lastError })
+}
 
 /** File-backed CAS store. Cross-process exclusion uses a bounded, stale-recoverable lock. */
 export class FileStateMutationStore implements StateMutationStore {
@@ -18,6 +41,7 @@ export class FileStateMutationStore implements StateMutationStore {
     private readonly root: string,
     private readonly lockTimeoutMs = 10_000,
     private readonly acquireLock: AcquireLock = lockfile.lock,
+    private readonly replaceFile: ReplaceFile = fs.rename,
   ) {}
 
   private statePath(changeId: string): string { return join(this.root, changeId, 'flow-state.yaml') }
@@ -42,6 +66,8 @@ export class FileStateMutationStore implements StateMutationStore {
     }
     let result: T
     try {
+      await this.cleanupLegacyLock(dirname(path))
+      await this.cleanupTemporaryStates(dirname(path))
       result = await fn()
     } catch (error) {
       try { await release() }
@@ -58,6 +84,37 @@ export class FileStateMutationStore implements StateMutationStore {
       // Windows 可能在杀毒扫描或句柄释放窗口内拒绝删除锁目录；保留它让 stale 机制接管，不能覆盖已完成的状态提交。
     }
     return result
+  }
+
+  private async cleanupTemporaryStates(directory: string): Promise<void> {
+    const entries = await fs.readdir(directory)
+    const temporaryStates = entries.filter((entry) => /^flow-state\.yaml\..+\.tmp$/.test(entry))
+    for (const entry of temporaryStates) {
+      const temporaryPath = join(directory, entry)
+      try {
+        await retryWindowsOperation(() => fs.unlink(temporaryPath), `remove ${temporaryPath}`)
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException | null)?.code
+        if (code !== 'ENOENT' && !(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+      }
+    }
+  }
+
+  private async cleanupLegacyLock(directory: string): Promise<void> {
+    const legacyPath = join(directory, 'mutation.lock.lock')
+    let modifiedAt: number
+    try { modifiedAt = (await fs.stat(legacyPath)).mtimeMs }
+    catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return
+      throw error
+    }
+    if (Date.now() - modifiedAt < Math.max(2_000, this.lockTimeoutMs * 3)) return
+    try {
+      await retryWindowsOperation(() => fs.rm(legacyPath, { recursive: true, force: true }), `remove ${legacyPath}`)
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      if (!(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+    }
   }
 
   private async syncParentDirectory(path: string): Promise<void> {
@@ -104,7 +161,13 @@ export class FileStateMutationStore implements StateMutationStore {
         await handle.writeFile(stringify(next, { aliasDuplicateObjects: false }), 'utf8')
         await handle.sync()
       } finally { await handle.close() }
-      await fs.rename(temp, path)
+      await retryWindowsOperation(() => this.replaceFile(temp, path), `replace ${path}`)
+      try {
+        await retryWindowsOperation(() => fs.unlink(temp), `remove ${temp}`)
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException | null)?.code
+        if (code !== 'ENOENT' && !(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+      }
       await this.syncParentDirectory(path)
       return { actionId: request.actionId, payloadDigest, previousVersion: state.state_version, stateVersion: next.state_version, replayed: false }
     })

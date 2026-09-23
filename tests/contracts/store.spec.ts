@@ -1,4 +1,4 @@
-import { cp, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, readdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stringify } from 'yaml'
@@ -30,6 +30,35 @@ describe('file CAS store', () => {
     expect((await store.mutate('change', request)).replayed).toBe(false)
     expect((await store.mutate('change', request)).replayed).toBe(true)
     await expect(store.mutate('change', { ...request, actionId: 'other' })).rejects.toThrowError(expect.objectContaining<Partial<ContractError>>({ code: 'VERSION_CONFLICT' }))
+  })
+
+  it('下一次加锁时清理上一次原子替换失败留下的临时状态', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    await mkdir(join(root, 'change'))
+    await cp('fixtures/state/initial.yaml', join(root, 'change/flow-state.yaml'))
+    const failingStore = new FileStateMutationStore(root, 10_000, undefined, async () => {
+      throw Object.assign(new Error('sharing violation'), { code: 'EPERM' })
+    })
+    await expect(failingStore.mutate('change', { expectedVersion: 0, actionId: 'failed-replace', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).rejects.toMatchObject({ code: 'EPERM' })
+    expect((await readdir(join(root, 'change'))).some((entry) => entry.endsWith('.tmp'))).toBe(true)
+
+    const recovered = new FileStateMutationStore(root)
+    await recovered.mutate('change', { expectedVersion: 0, actionId: 'recovered', action: 'reserve-operation', payload: { operation_id: 'op-2', execution_ref: 'exec-2' } })
+    expect((await readdir(join(root, 'change'))).filter((entry) => entry.endsWith('.tmp'))).toEqual([])
+    expect((await recovered.read('change')).state_version).toBe(1)
+  })
+
+  it('清理旧版本遗留的过期 mutation.lock.lock 目录', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    const changeRoot = join(root, 'change')
+    await mkdir(changeRoot)
+    await cp('fixtures/state/initial.yaml', join(changeRoot, 'flow-state.yaml'))
+    const legacyLock = join(changeRoot, 'mutation.lock.lock')
+    await mkdir(legacyLock)
+    const stale = new Date(Date.now() - 60_000)
+    await utimes(legacyLock, stale, stale)
+    await new FileStateMutationStore(root).mutate('change', { expectedVersion: 0, actionId: 'legacy-lock', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })
+    await expect(readdir(changeRoot)).resolves.not.toContain('mutation.lock.lock')
   })
 
   it('serializes concurrent writers so only one wins the expected version', async () => {

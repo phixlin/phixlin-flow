@@ -3,6 +3,7 @@ import { Ajv2020, type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.
 import { parseDocument } from 'yaml'
 import eventSchema from '../../schemas/event-v1.schema.json' with { type: 'json' }
 import executionResultSchema from '../../schemas/execution-result-v1.schema.json' with { type: 'json' }
+import hostEnvelopeSchema from '../../schemas/host-envelope-v1.schema.json' with { type: 'json' }
 import stateSchema from '../../schemas/flow-state-v1.schema.json' with { type: 'json' }
 import reducerVectorsSchema from '../../schemas/reducer-vectors-v1.schema.json' with { type: 'json' }
 import workflowSchema from '../../schemas/workflow-profile-v1.schema.json' with { type: 'json' }
@@ -20,6 +21,7 @@ const ajv = new Ajv2020({ allErrors: true, strict: true })
 const stateValidator = ajv.compile(stateSchema)
 const workflowValidator = ajv.compile(workflowSchema)
 const executionResultValidator = ajv.compile(executionResultSchema)
+const hostEnvelopeValidator = ajv.compile(hostEnvelopeSchema)
 const eventValidator = ajv.compile(eventSchema)
 const reducerVectorsValidator = ajv.compile(reducerVectorsSchema)
 
@@ -37,6 +39,7 @@ function assertSchema(
     | 'INVALID_STATE'
     | 'INVALID_WORKFLOW_PROFILE'
     | 'INVALID_EXECUTION_RESULT'
+    | 'INVALID_HOST_ENVELOPE'
     | 'INVALID_EVENT'
     | 'INVALID_REDUCER_VECTORS',
 ): void {
@@ -512,6 +515,16 @@ export function validateExecutionResult(value: unknown): void {
   if (artifactIssues.length > 0) {
     throw new ContractError('INVALID_EXECUTION_RESULT', artifactIssues)
   }
+}
+
+export function validateHostEnvelope(value: unknown): asserts value is {
+  schema: 'phixlin.host-envelope.v1'
+  operation_id: string
+  state_version: number
+  input_digest: string
+  result: Record<string, unknown>
+} {
+  assertSchema(hostEnvelopeValidator, value, 'INVALID_HOST_ENVELOPE')
 }
 
 export function validateDiagnosticEvent(value: unknown): void {

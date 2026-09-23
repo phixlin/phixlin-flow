@@ -9,6 +9,7 @@ export {
   validateChangeState,
   validateDiagnosticEvent,
   validateExecutionResult,
+  validateHostEnvelope,
   validateReducerVectors,
   validateWorkflowProfile,
 } from './contracts/validation.js'
@@ -17,6 +18,7 @@ export { reduce } from './contracts/reducer.js'
 export { FileStateMutationStore } from './contracts/store.js'
 export { FakeRuntime } from './runtime/fake.js'
 export { HostRuntime } from './runtime/host.js'
+export type { HostSemanticResult } from './runtime/host.js'
 export { StageRunner } from './runtime/stage-runner.js'
 export { FileEvidenceStore } from './runtime/evidence.js'
 export { FileSkillResolver } from './runtime/skill-resolver.js'

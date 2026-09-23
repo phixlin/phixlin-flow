@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { createWorkflowSnapshot } from './contracts/workflow.js'
 import { digestJson } from './contracts/digest.js'
 import { FileStateMutationStore } from './contracts/store.js'
-import { validateWorkflowProfile } from './contracts/validation.js'
+import { validateHostEnvelope, validateWorkflowProfile } from './contracts/validation.js'
 import { HostRuntime } from './runtime/host.js'
 import { FileEvidenceStore } from './runtime/evidence.js'
 import { FileSkillResolver } from './runtime/skill-resolver.js'
@@ -151,9 +151,14 @@ async function main() {
       if (state.inner.state !== 'executing' || state.inner.operation.operation_id !== option(args, '--operation', true)) throw new Error(messages.hostOperationMismatch)
       if (state.inner.position.action === 'run-checks') throw new Error(messages.hostCheckCannotSubmit)
       const submitted: unknown = JSON.parse(await readFile(resolve(option(args, '--result-file', true)!), 'utf8'))
-      if (!submitted || typeof submitted !== 'object') throw new Error(messages.hostEnvelopeInvalid)
-      const envelope = submitted as Record<string, unknown>
-      if (envelope.operation_id !== state.inner.operation.operation_id || envelope.state_version !== state.state_version || envelope.input_digest !== state.inner.operation.binding.input_digest) throw new Error(messages.hostBindingMismatch)
+      try { validateHostEnvelope(submitted) }
+      catch (error) { throw new Error(`${messages.hostEnvelopeInvalid}：${error instanceof Error ? error.message : String(error)}`) }
+      const envelope = submitted
+      const bindingIssues: string[] = []
+      if (envelope.operation_id !== state.inner.operation.operation_id) bindingIssues.push(`operation_id 期望 ${state.inner.operation.operation_id}，收到 ${envelope.operation_id}`)
+      if (envelope.state_version !== state.state_version) bindingIssues.push(`state_version 期望 ${state.state_version}，收到 ${envelope.state_version}`)
+      if (envelope.input_digest !== state.inner.operation.binding.input_digest) bindingIssues.push(`input_digest 期望 ${state.inner.operation.binding.input_digest}，收到 ${envelope.input_digest}`)
+      if (bindingIssues.length > 0) throw new Error(`${messages.hostBindingMismatch}：${bindingIssues.join('；')}`)
       const result = await runtime.bindResult({ operationId: state.inner.operation.operation_id, executionRef: state.inner.operation.execution_ref, state, action: state.inner.position.action }, envelope.result)
       if (result.kind === 'blocked') {
         await store.mutate(changeId, { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action: 'execution-error', payload: { operation_id: state.inner.operation.operation_id, confirmed_stopped: true, reason: result.summary, manual_retry: true, evidence: result.artifacts } })

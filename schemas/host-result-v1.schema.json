@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phixlin.dev/schemas/host-result-v1.schema.json",
   "title": "Host stage semantic result v1",
   "type": "object",
   "required": ["kind", "summary", "questions", "proposal", "shape", "review", "verification"],
