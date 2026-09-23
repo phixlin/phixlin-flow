@@ -8,23 +8,29 @@ import { ContractError } from './error.js'
 import { reduce, type ReducerEvent } from './reducer.js'
 import { validateChangeState } from './validation.js'
 import type { ChangeState, MutationReceipt, MutationRequest, StateMutationStore } from './types.js'
+import type { LockOptions } from 'proper-lockfile'
+
+type AcquireLock = (file: string, options: LockOptions) => Promise<() => Promise<void>>
 
 /** File-backed CAS store. Cross-process exclusion uses a bounded, stale-recoverable lock. */
 export class FileStateMutationStore implements StateMutationStore {
   constructor(
     private readonly root: string,
     private readonly lockTimeoutMs = 10_000,
+    private readonly acquireLock: AcquireLock = lockfile.lock,
   ) {}
 
   private statePath(changeId: string): string { return join(this.root, changeId, 'flow-state.yaml') }
   private lockPath(changeId: string): string { return join(this.root, changeId, 'mutation.lock') }
 
   private async withLock<T>(changeId: string, fn: () => Promise<T>): Promise<T> {
-    const path = this.lockPath(changeId)
+    const path = this.statePath(changeId)
+    const lockPath = this.lockPath(changeId)
     await fs.mkdir(dirname(path), { recursive: true })
     let release: () => Promise<void>
     try {
-      release = await lockfile.lock(path, {
+      release = await this.acquireLock(path, {
+        lockfilePath: lockPath,
         retries: { retries: Math.max(0, Math.floor(this.lockTimeoutMs / 10)), minTimeout: 10, maxTimeout: 10 },
         stale: Math.max(2_000, this.lockTimeoutMs * 3),
         update: Math.max(1_000, this.lockTimeoutMs),
@@ -34,11 +40,24 @@ export class FileStateMutationStore implements StateMutationStore {
       if ((error as NodeJS.ErrnoException | null)?.code === 'ELOCKED') throw new ContractError('LOCK_BUSY', ['mutation lock timeout'])
       throw error
     }
+    let result: T
     try {
-      return await fn()
-    } finally {
-      await release()
+      result = await fn()
+    } catch (error) {
+      try { await release() }
+      catch (releaseError) {
+        const code = (releaseError as NodeJS.ErrnoException | null)?.code
+        if (!['EACCES', 'EBUSY', 'EPERM'].includes(code ?? '')) throw releaseError
+      }
+      throw error
     }
+    try { await release() }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      if (!['EACCES', 'EBUSY', 'EPERM'].includes(code ?? '')) throw error
+      // Windows 可能在杀毒扫描或句柄释放窗口内拒绝删除锁目录；保留它让 stale 机制接管，不能覆盖已完成的状态提交。
+    }
+    return result
   }
 
   private async syncParentDirectory(path: string): Promise<void> {

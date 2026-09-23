@@ -19,5 +19,6 @@
 | 0015-codex-managed-skills | Codex 管理业务 Skill（入口安装由 0016 补充） | superseded-in-part |
 | 0016-codex-skill-entry | Codex 原生 phixlin Skill 入口 | active |
 | 0017-host-owned-agent-runtime | 宿主 Agent 驱动 Harness | active |
+| 0018-windows-lock-cleanup | Windows 锁目录清理 | active |
 
 决策记录采用三段式：Context（当时的约束）、Decision（选了什么）、Consequences（代价与不做的部分）。已归档的记录冻结不改；新决策新开文件推翻旧决策。

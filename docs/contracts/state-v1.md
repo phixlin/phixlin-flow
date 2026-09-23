@@ -19,7 +19,7 @@
 
 <control-root>/<repository-id>/<change-id>/       位于 Agent 可写根目录之外
   flow-state.yaml                                唯一恢复控制面
-  mutation.lock                                  固定 inode advisory lock
+  mutation.lock                                  固定路径目录锁（由 Store 通过 proper-lockfile 管理）
   executor.lock                                  固定 inode advisory lock
   operations/                                    适配器输入/结果暂存
 ```

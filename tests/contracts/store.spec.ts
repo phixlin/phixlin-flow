@@ -6,6 +6,21 @@ import { describe, expect, it } from 'vitest'
 import { ContractError, FileEvidenceStore, FileStateMutationStore, digestJson, parseChangeStateYaml } from '../../src/index.js'
 
 describe('file CAS store', () => {
+  it('固定使用 mutation.lock，并忽略 Windows 锁目录清理竞争', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    await mkdir(join(root, 'change'))
+    await cp('fixtures/state/initial.yaml', join(root, 'change/flow-state.yaml'))
+    let options: import('proper-lockfile').LockOptions | undefined
+    const acquire = async (_file: string, received: import('proper-lockfile').LockOptions) => {
+      options = received
+      return async () => { throw Object.assign(new Error('sharing violation'), { code: 'EPERM' }) }
+    }
+    const store = new FileStateMutationStore(root, 10_000, acquire)
+    await expect(store.mutate('change', { expectedVersion: 0, actionId: 'windows-cleanup', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).resolves.toMatchObject({ replayed: false })
+    expect(options?.lockfilePath).toBe(join(root, 'change', 'mutation.lock'))
+    expect((await store.read('change')).state_version).toBe(1)
+  })
+
   it('deduplicates action IDs and rejects stale versions', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
     await mkdir(join(root, 'change'))

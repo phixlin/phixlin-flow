@@ -15,4 +15,6 @@
 
 `RESOURCE_DRIFT` 表示状态引用的不可变工件已变化。不要覆盖原摘要或跳过校验；从可信备份恢复对应文件，或保留 change 目录并重新启动一个 change。`EXECUTION_UNKNOWN` 表示宿主会话中断或结果提交边界无法判断外部副作用，必须先核对工作区、operation 和运行结果，再按 blocker 允许的动作处理。没有有效 operation 结果时，不得直接将工作区修改视为阶段完成。
 
+Windows 下如果 Store 报告锁目录清理竞争，不要手动删除 `mutation.lock` 或其临时目录。只要状态提交已经返回成功，后续 CLI 会在 stale 窗口后自动回收锁；只有 `LOCK_BUSY` 持续超时才按状态输出的恢复命令处理。
+
 使用 `export-evidence` 后立即运行 `verify-evidence <bundle-path>`。该命令不读取项目或 change 存储，仅使用审计包内容；删除、修改、增加文件，以及状态与 Workflow 不一致都会失败。
