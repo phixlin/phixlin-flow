@@ -9,6 +9,7 @@ export {
   validateChangeState,
   validateDiagnosticEvent,
   validateExecutionResult,
+  validateShapeContent,
   validateHostEnvelope,
   validateReducerVectors,
   validateWorkflowProfile,

@@ -5,12 +5,20 @@ import {
   ContractError,
   validateDiagnosticEvent,
   validateExecutionResult,
+  validateShapeContent,
   validateReducerVectors,
 } from '../../src/index.js'
 
 const digest = 'a'.repeat(64)
 
 describe('external record contracts', () => {
+  it('Shape 验收项和检查项与状态契约一致，拒绝空项、重复标识和无效检查', () => {
+    expect(() => validateShapeContent({ acceptance: [], checks: [] })).toThrow('/shape/acceptance')
+    expect(() => validateShapeContent({ acceptance: [{ id: 'A1', text: '', verification: '检查' }], checks: [] })).toThrow('/shape/acceptance/0/text')
+    expect(() => validateShapeContent({ acceptance: [{ id: 'A1', text: '完成', verification: '检查' }], checks: [{ id: 'check', argv: [], cwd: '.', timeout_ms: 1 }] })).toThrow('/shape/checks/0/argv')
+    expect(() => validateShapeContent({ acceptance: [{ id: 'A1', text: '完成', verification: '检查' }, { id: 'A1', text: '重复', verification: '检查' }], checks: [] })).toThrow('标识不能重复')
+    expect(() => validateShapeContent({ acceptance: [{ id: 'A1', text: '完成', verification: '检查' }], checks: [] })).not.toThrow()
+  })
   it('accepts a bound needs-user execution result', () => {
     expect(() =>
       validateExecutionResult({

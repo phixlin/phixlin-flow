@@ -113,3 +113,7 @@ phixlin verify-evidence ./evidence-bundle
 ```
 
 `operation_id`、`state_version` 或 `input_digest` 不匹配当前 operation 时，CLI 会分别报告期望值和收到的值。`result.skill_invocations[].output` 是宿主提交的文本；CLI 会将它写入证据并转换为内部 artifact 引用。
+
+以上示例中的 `shape: null` 仅适用于不产出 Shape 的阶段；Shape 阶段以 `stage-ready` 提交时，必须填写 `shape.document`、至少一项 `shape.acceptance` 和 `shape.checks`。例如 `"shape": { "document": "动画规格", "acceptance": [{ "id": "animation", "text": "动画可见", "verification": "浏览器打开页面确认" }], "checks": [] }`。验收项的 `id`、`text`、`verification` 不能为空；检查项如果存在，`argv` 不能为空，验收项和检查项的标识不能重复。
+
+如果 `submit` 因 Shape 内容无效而失败，先查询 `phixlin status <change-id>`；仍为 `executing` 时修正结果文件，使用同一 operation 和最新版本重新提交。旧版本遗留的 `evaluating` change，升级 CLI 后按 `status.next_command` 执行 `resume`，进入 `blocked` 后查看原因，确认后执行 `retry` 并提交修正后的 Shape。不要手动修改 `flow-state.yaml` 或 `artifacts/`。

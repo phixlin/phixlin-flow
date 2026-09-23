@@ -22,5 +22,6 @@
 | 0018-windows-lock-cleanup | Windows 锁目录清理 | active |
 | 0019-windows-smoke-and-runtime-ignore | Windows 冒烟测试与运行时目录 | active |
 | 0020-windows-state-recovery-and-host-envelope | Windows 状态恢复与宿主提交信封 | active |
+| 0021-shape-result-preflight-and-recovery | Shape 结果预校验与旧状态恢复 | active |
 
 决策记录采用三段式：Context（当时的约束）、Decision（选了什么）、Consequences（代价与不做的部分）。已归档的记录冻结不改；新决策新开文件推翻旧决策。

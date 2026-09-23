@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { parseChangeStateYaml } from '../src/index.js'
+import { FileEvidenceStore, FileStateMutationStore, parseChangeStateYaml } from '../src/index.js'
 
 const exec = promisify(execFile)
 const roots: string[] = []
@@ -21,6 +21,38 @@ async function cleanup(root: string): Promise<void> {
 afterEach(async () => { for (const root of roots.splice(0)) await cleanup(root) })
 
 describe('phixlin-flow 真实入口', { timeout: process.platform === 'win32' ? 180_000 : 30_000 }, () => {
+  it('旧版本遗留的非法 Shape 结果可转为 blocker 并重新提交', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-invalid-shape-'))
+    roots.push(root)
+    await mkdir(join(root, '.phixlin', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.phixlin', 'workflows', 'empty.yaml'), 'version: 1\nname: empty\nworkflow: phixlin-flow-v1\nruntime: codex\nstages:\n  shape:\n    skills: []\n  build:\n    skills: []\n  verify:\n    skills: []\n')
+    await writeFile(join(root, 'brief.md'), '简单动画\n')
+    const cli = resolve('dist/src/cli.js')
+    const invoke = async (...args: string[]) => JSON.parse((await exec(process.execPath, [cli, ...args], { cwd: root })).stdout)
+    await invoke('start', 'legacy-shape', '--workflow', 'empty', '--brief', 'brief.md')
+    const executing = await invoke('resume', 'legacy-shape', '--expected-version', '0', '--expected-action', 'agent-work')
+    const changeRoot = join(root, '.phixlin', 'changes', 'legacy-shape')
+    const store = new FileStateMutationStore(join(root, '.phixlin', 'changes'))
+    const evidence = new FileEvidenceStore(changeRoot)
+    const document = await evidence.write('规格')
+    const state = await store.read('legacy-shape')
+    if (state.inner.state !== 'executing') throw new Error('预期已派发 operation')
+    const collected = await evidence.write(JSON.stringify({ operation: state.inner.operation, result: { kind: 'stage-ready', summary: '旧结果', artifacts: [], questions: [], proposal: null, shape: { documents: [document], acceptance: [], checks: [] } } }))
+    await store.mutate('legacy-shape', { expectedVersion: state.state_version, actionId: 'legacy-result', action: 'execution-result', payload: { operation_id: state.inner.operation.operation_id, result: collected } })
+    const evaluating = await store.read('legacy-shape')
+    expect(evaluating.inner.state).toBe('evaluating')
+    const blocked = await invoke('resume', 'legacy-shape', '--expected-version', String(evaluating.state_version), '--expected-action', 'evaluate')
+    expect(blocked).toMatchObject({ status: 'blocked', blocker: { reason: expect.stringContaining('/shape/acceptance') } })
+    expect((await store.read('legacy-shape')).state_version).toBeGreaterThan(evaluating.state_version)
+    const retried = await invoke('retry', 'legacy-shape', '--expected-version', String(blocked.state_version), '--expected-action', 'blocked')
+    const fresh = await invoke('resume', 'legacy-shape', '--expected-version', String(retried.state_version), '--expected-action', 'agent-work')
+    expect(fresh.operation.operation_id).not.toBe(executing.operation.operation_id)
+    const file = join(root, 'result.json')
+    await writeFile(file, JSON.stringify({ schema: 'phixlin.host-envelope.v1', operation_id: fresh.operation.operation_id, state_version: fresh.state_version, input_digest: fresh.operation.binding.input_digest, result: { kind: 'stage-ready', summary: '修正规格', questions: [], proposal: null, shape: { document: '规格', acceptance: [{ id: 'animation', text: '动画可见', verification: '检查页面' }], checks: [] }, review: null, verification: null } }))
+    await invoke('submit', 'legacy-shape', '--operation', fresh.operation.operation_id, '--result-file', file, '--expected-version', String(fresh.state_version), '--expected-action', 'executing')
+    expect((await store.read('legacy-shape')).shape?.acceptance).toHaveLength(1)
+  })
+
   it('宿主提交完整闭环，禁止越过 Shape 审批且不启动 Agent 子进程', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phixlin-host-smoke-'))
     roots.push(root)
@@ -54,6 +86,10 @@ describe('phixlin-flow 真实入口', { timeout: process.platform === 'win32' ? 
     expect((await invoke('status', 'host-change')).state_version).toBe(status.state_version)
     await writeFile(resultFile, JSON.stringify({ schema: 'phixlin.host-envelope.v1', operation_id: status.operation.operation_id, state_version: status.state_version, input_digest: status.operation.binding.input_digest, result: semantic() }))
     await expect(invoke('submit', 'host-change', '--operation', status.operation.operation_id, '--result-file', resultFile, '--expected-version', String(status.state_version), '--expected-action', 'executing')).rejects.toThrow('Shape 结果缺少规格')
+    expect((await invoke('status', 'host-change')).state_version).toBe(status.state_version)
+    await expect(submit(status, semantic({ shape: { document: '规格', acceptance: [], checks: [] } }))).rejects.toThrow('shape/acceptance')
+    expect(parseChangeStateYaml(await readFile(join(root, '.phixlin/changes/host-change/flow-state.yaml'), 'utf8'))).toMatchObject({ state_version: status.state_version, inner: { state: 'executing' } })
+    await expect(submit(status, semantic({ shape: { document: '规格', acceptance: [{ id: 'animation', text: '', verification: '检查 HTML' }], checks: [] } }))).rejects.toThrow('shape/acceptance')
     expect((await invoke('status', 'host-change')).state_version).toBe(status.state_version)
     const blocked = await submit(status, semantic({ kind: 'blocked', summary: '宿主无法完成当前任务' }))
     expect(blocked).toMatchObject({ status: 'blocked', blocker: { reason: '宿主无法完成当前任务', recovery_command: expect.stringContaining('retry host-change') } })

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { Ajv2020 } from 'ajv/dist/2020.js'
 import { sha256 } from '../contracts/digest.js'
+import { validateShapeContent } from '../contracts/validation.js'
 import type { RuntimeAdapter, RuntimeInput, RuntimeResult } from './fake.js'
 import type { FileEvidenceStore } from './evidence.js'
 import hostResultSchema from '../../schemas/host-result-v1.schema.json' with { type: 'json' }
@@ -49,6 +50,7 @@ export class HostRuntime implements RuntimeAdapter {
     const value = submitted as unknown as HostSemanticResult
     if (value.kind === 'stage-ready') {
       if (input.action === 'agent-work' && input.state.outer.phase === 'shape' && !value.shape) throw new Error(messages.hostShapeMissing)
+      if (input.action === 'agent-work' && input.state.outer.phase === 'shape' && value.shape) validateShapeContent(value.shape)
       if (input.action === 'review-candidate' && !value.review) throw new Error(messages.hostReviewMissing)
       if (input.action === 'verify-candidate' && !value.verification) throw new Error(messages.hostVerificationMissing)
     }

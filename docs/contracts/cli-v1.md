@@ -27,6 +27,10 @@
 
 `resume` 在下一项宿主 operation 处返回。`status` 的 `operation` 包含当前 `operation_id`、`binding.input_digest` 和动作；`executing` 时 `next_command` 指向 `submit`。宿主把结果写成 UTF-8 JSON 文件，外层必须符合 `schemas/host-envelope-v1.schema.json`，格式为 `{ "schema": "phixlin.host-envelope.v1", "operation_id": "...", "state_version": 1, "input_digest": "...", "result": { "kind": "stage-ready", "summary": "...", "questions": [], "proposal": null, "shape": null, "review": null, "verification": null, "skill_invocations": [] } }`。Shape 的 `result.shape` 应包含 `document`、`acceptance`、`checks`；Reviewer 的 `result.review` 应包含 `verdict`、`report`；Verifier 的 `result.verification` 应包含 `verdict`、`acceptance`。可选 `result.skill_invocations` 记录 `{ "name": "...", "status": "completed", "output": "..." }`，仅作为 `model-reported` contextual Skill；CLI 会在边界把 `output` 写入证据并转换为内部 `artifact`，不代替 planned Skill 或宿主观测。提交前检查 operation、版本和 input digest；失败不允许直接跳过阶段。
 
+Shape 的 `acceptance` 至少有一项，每项 `id`、`text`、`verification` 不得为空；`checks` 可为空，但每项命令 `argv` 至少有一个参数。重复的验收/检查标识同样被拒绝。CLI 在写入证据和推进状态前校验这些字段；修正结果后，使用同一 operation 和最新版本重新 `submit`。旧版本若已把非法 Shape 结果写入 `evaluating`，升级后执行 `status` 所示 `resume` 会进入 `blocked`；查看原因后使用 `retry` 派发新的 operation，再提交修正结果。不要手改 `flow-state.yaml` 或其证据工件。
+
+现有 `host-result-v1` schema 对 `acceptance` 的静态约束比 `flow-state-v1` 宽松；以 CLI 的提交前校验为准。为保持已归档 v1 格式不变，不修改既有 schema；后续新版本应统一两者约束。
+
 事件流使用 `phixlin.event.v1`，每个 change 的 `sequence` 单调递增。事件仅用于诊断：可以报告末行缺失或截断，但不能据此向前或向后推进状态。Skill 输出和适配器结果是不可变工件，名称由宿主创建的 operation 或 invocation ID 决定。控制器会先计算字节数和 SHA-256，再把引用写入状态。
 
 `status` 的 `requires_user` 在 `await-user`、`blocked` 和 `paused` 时为 `true`。`next_command` 可包含 `<actor>`、`<answer-file>` 等必须由操作者替换的占位符；每次状态变化后都应重新查询，不能复用旧版本命令。`recent_events` 默认返回最后五条主状态转换。

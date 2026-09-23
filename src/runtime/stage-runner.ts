@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { ContractError } from '../contracts/error.js'
 import { decide } from '../contracts/decide.js'
 import { digestJson } from '../contracts/digest.js'
-import { validateExecutionResult } from '../contracts/validation.js'
+import { validateExecutionResult, validateShapeContent } from '../contracts/validation.js'
 import type { ChangeState, Decision, MutationReceipt, MutationRequest } from '../contracts/types.js'
 import type { RuntimeAdapter, RuntimeResult } from './fake.js'
 import type { FileEvidenceStore } from './evidence.js'
@@ -49,6 +49,13 @@ export class StageRunner {
     if (digestJson(envelope.operation) !== digestJson(operation)) throw new ContractError('STALE_RESULT', ['persisted result belongs to a different operation'])
     const result: RuntimeResult = envelope.result
     validateExecutionResult({ schema: 'phixlin.execution-result.v1', binding: { change_id: state.change_id, stage_visit: state.outer.stage_visit, input_digest: operation.binding.input_digest }, kind: result.kind, summary: result.summary, artifacts: result.artifacts, questions: result.questions, proposal: result.proposal, skill_invocations: result.skill_invocations ?? [] })
+    if (currentPosition.action === 'agent-work' && state.outer.phase === 'shape' && result.kind === 'stage-ready' && result.shape) {
+      try { validateShapeContent(result.shape) }
+      catch (error) {
+        if (!(error instanceof ContractError) || error.code !== 'INVALID_EXECUTION_RESULT') throw error
+        return this.mutate(changeId, state, 'execution-error', { operation_id: operationId, confirmed_stopped: true, manual_retry: true, reason: error.message, evidence: [state.inner.result] })
+      }
+    }
     for (const [index, invocation] of (result.skill_invocations ?? []).entries()) {
       const invocationId = `${operationId}-contextual-${index}`
       if (state.skills.some((skill) => skill.invocation_id === invocationId)) continue
@@ -272,6 +279,7 @@ export class StageRunner {
     const operation = state.inner.operation
     if (digestJson(await this.skillInput(state, state.inner.position)) !== operation.binding.input_digest) throw new ContractError('RESOURCE_DRIFT', ['operation input changed after reservation'])
     validateExecutionResult({ schema: 'phixlin.execution-result.v1', binding: { change_id: state.change_id, stage_visit: state.outer.stage_visit, input_digest: operation.binding.input_digest }, kind: result.kind, summary: result.summary, artifacts: result.artifacts, questions: result.questions, proposal: result.proposal, skill_invocations: result.skill_invocations ?? [] })
+    if (state.inner.position.action === 'agent-work' && state.outer.phase === 'shape' && result.kind === 'stage-ready' && result.shape) validateShapeContent(result.shape)
     for (const artifact of result.artifacts) await this.evidence.read(artifact)
     for (const artifact of result.shape?.documents ?? []) await this.evidence.read(artifact)
     if (result.candidate) {

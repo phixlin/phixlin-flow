@@ -8,6 +8,7 @@ import stateSchema from '../../schemas/flow-state-v1.schema.json' with { type: '
 import reducerVectorsSchema from '../../schemas/reducer-vectors-v1.schema.json' with { type: 'json' }
 import workflowSchema from '../../schemas/workflow-profile-v1.schema.json' with { type: 'json' }
 import { ContractError } from './error.js'
+import messages from '../i18n/zh-CN.json' with { type: 'json' }
 import type {
   Action,
   ArtifactRef,
@@ -19,6 +20,8 @@ import type {
 
 const ajv = new Ajv2020({ allErrors: true, strict: true })
 const stateValidator = ajv.compile(stateSchema)
+const shapeAcceptanceValidator = ajv.compile({ $ref: `${stateSchema.$id}#/$defs/shapeSnapshot/properties/acceptance` })
+const shapeChecksValidator = ajv.compile({ $ref: `${stateSchema.$id}#/$defs/shapeSnapshot/properties/checks` })
 const workflowValidator = ajv.compile(workflowSchema)
 const executionResultValidator = ajv.compile(executionResultSchema)
 const hostEnvelopeValidator = ajv.compile(hostEnvelopeSchema)
@@ -515,6 +518,21 @@ export function validateExecutionResult(value: unknown): void {
   if (artifactIssues.length > 0) {
     throw new ContractError('INVALID_EXECUTION_RESULT', artifactIssues)
   }
+}
+
+export function validateShapeContent(shape: { acceptance: unknown; checks: unknown }): void {
+  const issues: string[] = []
+  if (!shapeAcceptanceValidator(shape.acceptance)) issues.push(...(shapeAcceptanceValidator.errors ?? []).map((error) => `/shape/acceptance${error.instancePath} ${messages.hostShapeAcceptanceInvalid}：${error.message}`))
+  if (!shapeChecksValidator(shape.checks)) issues.push(...(shapeChecksValidator.errors ?? []).map((error) => `/shape/checks${error.instancePath} ${messages.hostShapeChecksInvalid}：${error.message}`))
+  if (Array.isArray(shape.acceptance)) {
+    const ids = shape.acceptance.map((item: { id: string }) => item.id)
+    if (new Set(ids).size !== ids.length) issues.push(`/shape/acceptance ${messages.hostShapeDuplicateIds}`)
+  }
+  if (Array.isArray(shape.checks)) {
+    const ids = shape.checks.map((item: { id: string }) => item.id)
+    if (new Set(ids).size !== ids.length) issues.push(`/shape/checks ${messages.hostShapeDuplicateIds}`)
+  }
+  if (issues.length > 0) throw new ContractError('INVALID_EXECUTION_RESULT', issues)
 }
 
 export function validateHostEnvelope(value: unknown): asserts value is {
