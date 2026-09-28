@@ -13,5 +13,11 @@
   "hostReviewMissing": "Review 结果缺少报告",
   "hostVerificationMissing": "Verify 结果缺少验收结论",
   "hostResultInvalid": "宿主结果格式错误",
-  "agentCheckForbidden": "机器检查不能启动底层 Agent CLI"
+  "agentCheckForbidden": "机器检查不能启动底层 Agent CLI",
+  "commandStartFailed": "启动命令失败",
+  "commandStartRecovery": "请检查可执行文件、工作目录和权限；运行 phixlin status <change-id> 核对状态。仅当原 operation 仍为 executing 时，可运行 phixlin submit <change-id> --operation <operation-id> --result-file <result-file> --expected-version <current-version> --expected-action executing；若已 blocked，修复后按最新状态执行 retry；其他状态按下一动作继续。",
+  "lockAcquireFailed": "获取变更锁失败",
+  "lockRecovery": "请检查目录权限；先运行 phixlin status <change-id> 查看状态，异常退出遗留的锁会在过期窗口后恢复，不要手动删除正在使用的锁。",
+  "stateReplaceFailed": "替换状态文件失败",
+  "stateReplaceRecovery": "请检查文件权限及占用情况，再以当前版本重试原命令；临时文件会在下一次加锁时清理。"
 }

@@ -1,5 +1,5 @@
 # phixlin-flow
-phixlin-flow 是面向编码 Agent 的、可适配多平台的确定性交付 Harness。它将需求澄清、规格制定、代码实现、机器验证、人工确认和知识归档组织为可审计、可恢复的工作流。
+phixlin-flow 是面向编码 Agent 的、可适配多平台的确定性交付 Harness。它将需求澄清、规格制定、代码实现、机器验证、人工确认和知识归档组织为可审计、可恢复的工作流。需求理解、代码修改、Git 差异解释和验收语义由宿主 Codex 会话完成；Harness 只负责控制面、协议校验、机械证据采集、哈希、门禁和恢复。
 
 phixlin-flow 由当前宿主 Agent 会话驱动，CLI 管理状态、门禁和证据，不启动底层 Agent CLI。M3 的旧运行证据位于 [`docs/evidence/m3/`](docs/evidence/m3/)，只适用于已废弃的子进程模型；新的宿主交接闭环仍需真实会话验收。本地示例见 [`examples/`](examples/)；状态、CAS 和 CLI 契约见 [`docs/contracts/`](docs/contracts/)；进度见 [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md)。
 
@@ -35,4 +35,6 @@ codex
 | pnpm test:smoke | 真实入口冒烟测试 |
 | pnpm check:all | 全量本地门禁 |
 
-Windows 开发环境支持 Node.js 22、pnpm install 和 pnpm check:all，不需要 Python 或 Visual Studio C++ Build Tools。Store 使用跨平台文件锁；异常退出后的锁会在 stale 窗口后恢复。Harness 不依赖 Windows 的 `codex.cmd` 启动路径。
+Windows 开发环境支持 Node.js 22、pnpm install 和 pnpm check:all，不需要 Python 或 Visual Studio C++ Build Tools。Store 使用跨平台文件锁；异常退出后的锁会在 stale 窗口后恢复。Harness 不依赖 Windows 的 `codex.cmd` 启动路径，也不通过 Node 子进程驱动 Agent。
+
+若 `resume` 或 `submit` 报告锁、状态替换或命令启动错误，先运行 `phixlin status <change-id>` 检查最新版本和下一动作，不要删除可能仍在使用的 `mutation.lock`。Build 阶段提交会机械采集 `git status` 和 `git diff` 作为候选证据；Harness 不解释差异是否满足需求。若 Git 启动失败，错误会明确指出具体子命令和工作目录。仅在原 operation 仍为 `executing` 时，以最新版本重试 `phixlin submit <change-id> --operation <operation-id> --result-file <result-file> --expected-version <current-version> --expected-action executing`；已进入 `blocked` 时，修复问题后按最新状态执行 `retry`。状态替换留下的临时文件会在下一次加锁时清理。

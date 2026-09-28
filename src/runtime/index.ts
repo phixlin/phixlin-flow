@@ -1,4 +1,4 @@
 export type { RuntimeAdapter, RuntimeInput, RuntimeResult } from './fake.js'
-export { HostRuntime } from './host.js'
-export type { HostRuntimeOptions, HostSemanticResult } from './host.js'
+export { HarnessEvidenceBoundary, HarnessMachineCheckRuntime } from './host.js'
+export type { HarnessEvidenceOptions, HostSemanticResult } from './host.js'
 export type { DriveResult, StageRunnerOptions, MutationPort } from './stage-runner.js'

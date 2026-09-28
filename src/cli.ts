@@ -8,7 +8,7 @@ import { createWorkflowSnapshot } from './contracts/workflow.js'
 import { digestJson } from './contracts/digest.js'
 import { FileStateMutationStore } from './contracts/store.js'
 import { validateHostEnvelope, validateWorkflowProfile } from './contracts/validation.js'
-import { HostRuntime } from './runtime/host.js'
+import { HarnessEvidenceBoundary, HarnessMachineCheckRuntime } from './runtime/host.js'
 import { FileEvidenceStore } from './runtime/evidence.js'
 import { FileSkillResolver } from './runtime/skill-resolver.js'
 import { StageRunner } from './runtime/stage-runner.js'
@@ -145,8 +145,8 @@ async function main() {
       state = await store.read(changeId)
     }
     const skills = new FileSkillResolver({ roots: [join(repository, '.agents', 'skills'), join(repository, '.codex', 'skills'), join(homedir(), '.agents', 'skills'), join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'skills')], repositoryRoot: repository })
-    const runtime = new HostRuntime({ evidence, cwd: repository })
-    const runner = new StageRunner(store, runtime, { evidence, skills })
+    const evidenceBoundary = new HarnessEvidenceBoundary({ evidence, cwd: repository })
+    const runner = new StageRunner(store, new HarnessMachineCheckRuntime(evidenceBoundary), { evidence, skills })
     if (command === 'submit') {
       if (state.inner.state !== 'executing' || state.inner.operation.operation_id !== option(args, '--operation', true)) throw new Error(messages.hostOperationMismatch)
       if (state.inner.position.action === 'run-checks') throw new Error(messages.hostCheckCannotSubmit)
@@ -159,7 +159,7 @@ async function main() {
       if (envelope.state_version !== state.state_version) bindingIssues.push(`state_version 期望 ${state.state_version}，收到 ${envelope.state_version}`)
       if (envelope.input_digest !== state.inner.operation.binding.input_digest) bindingIssues.push(`input_digest 期望 ${state.inner.operation.binding.input_digest}，收到 ${envelope.input_digest}`)
       if (bindingIssues.length > 0) throw new Error(`${messages.hostBindingMismatch}：${bindingIssues.join('；')}`)
-      const result = await runtime.bindResult({ operationId: state.inner.operation.operation_id, executionRef: state.inner.operation.execution_ref, state, action: state.inner.position.action }, envelope.result)
+      const result = await evidenceBoundary.bindResult({ operationId: state.inner.operation.operation_id, executionRef: state.inner.operation.execution_ref, state, action: state.inner.position.action }, envelope.result)
       if (result.kind === 'blocked') {
         await store.mutate(changeId, { expectedVersion: state.state_version, expectedStateDigest: digestJson(state), actionId: randomUUID(), action: 'execution-error', payload: { operation_id: state.inner.operation.operation_id, confirmed_stopped: true, reason: result.summary, manual_retry: true, evidence: result.artifacts } })
         output = buildStatus(await store.read(changeId))

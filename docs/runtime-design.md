@@ -252,11 +252,11 @@ outer.active 可以组合 ready/executing/evaluating/stage-ready；outer.paused 
 
 执行事件重复回传按 action_id 去重；不同 action_id 携带已消费 operation 的结果也不允许二次计数。用户回答后继续原 Skill，并不将 Skill 提前标为 completed。人工暂停不消耗 turn，预算增加必须有人工动作；修复计数不会随 visit 重置。
 
-### 4.5 Agent Loop 调度算法
+### 4.5 宿主交接与控制面推进
 
 ```js
-async function driveChange(changeId) {
-  // 持有需求执行器锁；每次 mutation 单独持有短状态锁。
+async function prepareChange(changeId) {
+  // Harness 只持有短状态锁；宿主 Agent 不在锁内执行。
   for (;;) {
     const state = await store.read(changeId);
     validateState(state);
@@ -265,8 +265,7 @@ async function driveChange(changeId) {
     if (command.kind === 'reconcile') return reconcile(state);
     if (command.kind === 'dispatch') {
       const reserved = await reserve(state, command);
-      const result = await adapter.execute(makeInput(reserved));
-      await collectBoundResult(reserved, result);
+      return makeHostHandoff(reserved);
     } else {
       // evaluate/transition/finalize 都经事件提交，不直接改 YAML。
       await applyCommand(state, command);
@@ -275,9 +274,9 @@ async function driveChange(changeId) {
 }
 ```
 
-makeInput 读取已确认规格、当前 planned Skill 指令、前项 Skill 输出、累计工作摘要、失败反馈及用户回答，不以历史聊天记录为必需输入。执行级结果统一是 `{kind, summary, artifacts, questions?, proposal?, skill_invocations?}`；kind 为 continue、needs-user、stage-ready、blocked。planned Skill 用 stage-ready 表示本次编排动作完成；基础 Agent 工作的 stage-ready 表示阶段就绪请求。无 planned Skill 的 Build 直接从 ready/agent-work 开始。
+makeInput 读取已确认规格、当前 planned Skill 指令、前项 Skill 输出、累计工作摘要、失败反馈及用户回答，不以历史聊天记录为必需输入；宿主 Codex 使用该输入完成语义工作并提交绑定结果。执行级结果统一是 `{kind, summary, artifacts, questions?, proposal?, skill_invocations?}`；kind 为 continue、needs-user、stage-ready、blocked。planned Skill 用 stage-ready 表示本次编排动作完成；基础 Agent 工作的 stage-ready 表示阶段就绪请求。无 planned Skill 的 Build 直接从 ready/agent-work 开始。
 
-模型在 agent-work 或 planned Skill 执行内部可以按上下文调用 Workflow Profile 之外的 Skill。此类调用标记为 `contextual`：不要求固定顺序、不要求一定发生、不计入阶段退出条件，也不能修改 workflow 快照。若 runtime 提供可信 Skill 调用事件，Adapter 直接记录；若平台只返回模型声明，则记录为 `reported` 级别，不能冒充宿主确认。contextual Skill 的输出可以进入后续上下文和证据，但其失败默认按普通 Agent turn 处理，不阻断 planned Skill 完成，除非它导致当前 turn 整体失败或产物不满足阶段守卫。
+宿主 Codex 在 agent-work 或 planned Skill 执行内部可以按上下文调用 Workflow Profile 之外的 Skill。此类调用标记为 `contextual`：不要求固定顺序、不要求一定发生、不计入阶段退出条件，也不能修改 workflow 快照。Harness 只记录宿主声明或外部提供的调用证据，不判断 Skill 的业务效果。contextual Skill 的输出可以进入后续上下文和证据，但其失败默认按普通宿主 turn 处理，不阻断 planned Skill 完成，除非宿主提交的整体结果失败或产物不满足阶段守卫。
 
 ### 4.6 Skill 间确定性交接
 
@@ -298,7 +297,7 @@ planned Skill A
 
 contextual Skill 使用同一种执行记录。host-observed 表示 runtime 提供了可信调用事件；model-reported 只表示 Agent 声明调用过，不作为 planned 完成证据。contextual 输出可以进入后续输入和阶段 Handoff，但不移动 planned 指针。将来只有真实第三方 Skill 无法通过原始输出和工件引用交接时，才为该 Skill 增加显式 adapter；MVP 不预建通用 adapter 或相关配置。
 
-模型内部工具循环属于 Codex adapter，Harness 不把每次读文件变成状态提交。Harness 的一个 turn 是一次有绑定输入和可验证输出的宿主调用；不同 turn 可创建新会话。Builder/Reviewer/Verifier 的会话和执行引用分离，阶段交接靠冻结工件。
+模型内部工具循环属于宿主 Codex，Harness 不把每次读文件变成状态提交。Harness 的一个 turn 是一次有绑定输入和可验证输出的宿主交接；不同 turn 可创建新会话。Builder/Reviewer/Verifier 的会话和执行引用分离，阶段交接靠冻结工件。
 
 ## 5. CAS 与提交协议
 
@@ -322,10 +321,10 @@ contextual Skill 使用同一种执行记录。host-observed 表示 runtime 提�
 
 ## 6. 外部执行与中断恢复
 
-采用 reserve -> dispatch -> collect -> commit 四步：
+采用 reserve -> host work -> collect -> commit 四步：
 
 1. reserve：主状态写入 operation_id、宿主分配的 execution_ref、输入摘要、visit/candidate 绑定及 running 状态。
-2. dispatch：将保留动作传给 Adapter，持久化事件和最终结果。Agent 返回正文，不能指定可信身份。
+2. host work：将保留动作和输入返回宿主 Codex；宿主完成语义工作后提交结果，不能指定可信身份。
 3. collect：控制器检查退出码、结构化结果、工件摘要和输入绑定。
 4. commit：以独立 actionId 提交完成。并发 pause 改变了版本时重新读取状态，在仍匹配同一 operation 的前提下收取结果；paused 保持暂停，不自动推进。
 

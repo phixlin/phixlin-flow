@@ -42,7 +42,7 @@
 | `stage_context` | 当前修订绑定、planned 完成顺序、执行 ID 和阶段证据。 |
 | `brief` | 当前 brief 修订、摘要、不可变副本和人工确认。 |
 | `shape` | 冻结的 spec 修订、验收 ID、检查命令 argv 数组和人工批准。 |
-| `candidate` | 与 spec、iteration、工作区摘要、证据、构建者和审查者绑定的 Builder Handoff。 |
+| `candidate` | 与 spec、iteration、工作区机械摘要、证据、构建者和审查者绑定的 Builder Handoff；摘要只用于身份绑定和漂移检测，不代表质量结论。 |
 | `verification` | 与当前候选及完整验收列表绑定的机器检查和 Verifier 结果。 |
 | `interaction` | 待回答的问题或批准、当前绑定、回答和精确恢复位置。 |
 | `blocker` | 错误码、原因、允许的恢复动作和精确恢复位置。 |
@@ -75,4 +75,6 @@
 
 ## 外部记录
 
-`schemas/execution-result-v1.schema.json` 是传给 Codex 的结构化结果 Schema。它有意采用 M0 观察到的较小 response-format JSON Schema 子集；Harness 在收取后检查条件约束和唯一性约束。只有 `needs-user` 结果允许包含 questions。`schemas/event-v1.schema.json` 定义只能追加的诊断事件，永远不能覆盖 `flow-state.yaml`。`schemas/reducer-vectors-v1.schema.json` 和 `fixtures/reducer/v1.yaml` 冻结了 M1 必须实现的事件行为。
+`schemas/execution-result-v1.schema.json` 是宿主 Codex 会话提交的结构化结果 Schema。它有意采用 M0 观察到的较小 response-format JSON Schema 子集；Harness 在收取后只检查协议、绑定、字段条件和唯一性约束，不解释宿主提交的业务语义。只有 `needs-user` 结果允许包含 questions。`schemas/event-v1.schema.json` 定义只能追加的诊断事件，永远不能覆盖 `flow-state.yaml`。`schemas/reducer-vectors-v1.schema.json` 和 `fixtures/reducer/v1.yaml` 冻结了 M1 必须实现的事件行为。
+
+Git 状态、差异、文件摘要和机器检查报告是 Harness 采集的原始证据。退出码产生的 `pass`/`fail` 仅表示该命令是否成功退出；验收是否满足、差异是否符合需求以及报告理由是否成立，均由宿主提交并由 Harness 按结构和绑定校验。

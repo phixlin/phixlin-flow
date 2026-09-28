@@ -21,6 +21,13 @@ describe('file CAS store', () => {
     expect((await store.read('change')).state_version).toBe(1)
   })
 
+  it('锁目录拒绝访问时说明位置和安全恢复步骤', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    const acquire = async () => { throw Object.assign(new Error('sharing violation'), { code: 'EPERM' }) }
+    const store = new FileStateMutationStore(root, 10_000, acquire)
+    await expect(store.mutate('change', { expectedVersion: 0, actionId: 'locked', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).rejects.toThrow(/mutation\.lock.*status.*不要手动删除/)
+  })
+
   it('deduplicates action IDs and rejects stale versions', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
     await mkdir(join(root, 'change'))
@@ -39,7 +46,7 @@ describe('file CAS store', () => {
     const failingStore = new FileStateMutationStore(root, 10_000, undefined, async () => {
       throw Object.assign(new Error('sharing violation'), { code: 'EPERM' })
     })
-    await expect(failingStore.mutate('change', { expectedVersion: 0, actionId: 'failed-replace', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).rejects.toMatchObject({ code: 'EPERM' })
+    await expect(failingStore.mutate('change', { expectedVersion: 0, actionId: 'failed-replace', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).rejects.toMatchObject({ code: 'EPERM', message: expect.stringMatching(/flow-state\.yaml.*重试原命令.*临时文件/) })
     expect((await readdir(join(root, 'change'))).some((entry) => entry.endsWith('.tmp'))).toBe(true)
 
     const recovered = new FileStateMutationStore(root)

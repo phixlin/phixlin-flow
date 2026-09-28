@@ -19,7 +19,11 @@ export interface MutationPort {
   mutate(changeId: string, request: MutationRequest<string, Record<string, unknown>>): Promise<MutationReceipt>
 }
 
-/** Drives controller-owned mutations; external runtime calls happen outside the CAS lock. */
+/**
+ * 只负责控制面 mutation、交接校验和证据收集。
+ * 生产 CLI 以 dispatch=false 调用 prepare，让宿主 Agent 在进程外完成语义工作；
+ * RuntimeAdapter 仅保留给确定性测试和 Verify 的机器检查。
+ */
 export class StageRunner {
   private readonly evidence: FileEvidenceStore
   private readonly skills: FileSkillResolver

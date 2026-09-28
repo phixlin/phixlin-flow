@@ -12,7 +12,13 @@ import messages from '../i18n/zh-CN.json' with { type: 'json' }
 const ajv = new Ajv2020({ allErrors: true })
 const validate = ajv.compile(hostResultSchema)
 
-export interface HostRuntimeOptions { evidence: FileEvidenceStore; cwd: string }
+export interface HarnessEvidenceOptions { evidence: FileEvidenceStore; cwd: string }
+
+function commandStartError(argv: string[], cwd: string, purpose: string, error: unknown): Error {
+  const source = error instanceof Error ? error : new Error(String(error))
+  const code = (source as NodeJS.ErrnoException).code ?? 'UNKNOWN'
+  return new Error(`${purpose}${messages.commandStartFailed}（${code}）：${JSON.stringify(argv)}；cwd=${cwd}。${messages.commandStartRecovery}`, { cause: source })
+}
 
 export interface HostSemanticResult {
   kind: RuntimeResult['kind']
@@ -25,11 +31,11 @@ export interface HostSemanticResult {
   verification: { verdict: 'pass' | 'fail'; acceptance: NonNullable<RuntimeResult['verification']>['acceptance'] } | null
 }
 
-/** 仅采集工作区与运行机器检查；阶段语义结果由宿主会话提交。 */
-export class HostRuntime implements RuntimeAdapter {
-  constructor(private readonly options: HostRuntimeOptions) {}
+/** 只校验宿主语义交接，并采集不含业务解释的机械证据。 */
+export class HarnessEvidenceBoundary {
+  constructor(private readonly options: HarnessEvidenceOptions) {}
 
-  async execute(input: RuntimeInput): Promise<RuntimeResult> {
+  async runChecks(input: RuntimeInput): Promise<RuntimeResult> {
     if (input.action !== 'run-checks') throw new Error(messages.hostStageMustSubmit)
     const checks = []
     for (const check of input.state.shape?.checks ?? []) {
@@ -76,8 +82,8 @@ export class HostRuntime implements RuntimeAdapter {
   }
 
   private async workspaceManifest(): Promise<{ text: string; files: { path: string; sha256: string; bytes: number }[] }> {
-    const status = await this.command(['git', 'status', '--porcelain=v1', '-z', '--untracked-files=all'])
-    if (status.code !== 0) throw new Error(`git status failed: ${status.stderr}`)
+    const status = await this.command(['git', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], this.options.cwd, 120_000, '采集工作区状态时')
+    if (status.code !== 0) throw new Error(`采集工作区状态失败：git status；cwd=${this.options.cwd}；${status.stderr}`)
     const entries = status.stdout.split('\0').filter(Boolean).filter((line) => !line.slice(3).startsWith('.phixlin/')).sort()
     const files = []
     for (const path of entries.map((line) => line.slice(3)).sort()) {
@@ -97,21 +103,36 @@ export class HostRuntime implements RuntimeAdapter {
 
   private async captureCandidate(summary: string): Promise<NonNullable<RuntimeResult['candidate']>> {
     const manifest = await this.workspaceManifest()
-    const diffResult = await this.command(['git', 'diff', '--binary', '--no-ext-diff', 'HEAD'])
-    if (diffResult.code !== 0) throw new Error(`git diff failed: ${diffResult.stderr}`)
+    const diffResult = await this.command(['git', 'diff', '--binary', '--no-ext-diff', 'HEAD'], this.options.cwd, 120_000, '采集候选变更时')
+    if (diffResult.code !== 0) throw new Error(`采集候选变更失败：git diff；cwd=${this.options.cwd}；${diffResult.stderr}`)
     const fileManifest = await this.options.evidence.write(JSON.stringify({ status: manifest.text, files: manifest.files }))
     const diff = await this.options.evidence.write(JSON.stringify({ git_diff: diffResult.stdout, files: manifest.files }))
     return { candidate_digest: fileManifest.sha256, file_manifest: fileManifest, diff, summary, addressed_acceptance_ids: [], known_limits: [] }
   }
 
-  private command(argv: string[], cwd = this.options.cwd, timeoutMs = 120_000): Promise<{ code: number; stdout: string; stderr: string }> {
+  private command(argv: string[], cwd = this.options.cwd, timeoutMs = 120_000, purpose = '执行命令时'): Promise<{ code: number; stdout: string; stderr: string }> {
     return new Promise((resolveResult, reject) => {
-      const child = spawn(argv[0]!, argv.slice(1), { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+      let child
+      try { child = spawn(argv[0]!, argv.slice(1), { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }) }
+      catch (error) { reject(commandStartError(argv, cwd, purpose, error)); return }
       const stdout: Buffer[] = []; const stderr: Buffer[] = []
       child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk)); child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-      child.on('error', reject)
+      child.on('error', (error) => reject(commandStartError(argv, cwd, purpose, error)))
       const timeout = setTimeout(() => child.kill('SIGTERM'), timeoutMs)
       child.on('close', (code) => { clearTimeout(timeout); resolveResult({ code: code ?? 1, stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') }) })
     })
+  }
+}
+
+/** 生产 StageRunner 适配器；只允许 Harness 执行冻结的机器检查。 */
+export class HarnessMachineCheckRuntime implements RuntimeAdapter {
+  constructor(private readonly boundary: HarnessEvidenceBoundary) {}
+
+  async execute(input: RuntimeInput): Promise<RuntimeResult> {
+    return this.boundary.runChecks(input)
+  }
+
+  inspectCandidate(): Promise<string> {
+    return this.boundary.inspectCandidate()
   }
 }

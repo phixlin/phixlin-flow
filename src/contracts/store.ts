@@ -7,6 +7,7 @@ import { digestJson } from './digest.js'
 import { ContractError } from './error.js'
 import { reduce, type ReducerEvent } from './reducer.js'
 import { validateChangeState } from './validation.js'
+import messages from '../i18n/zh-CN.json' with { type: 'json' }
 import type { ChangeState, MutationReceipt, MutationRequest, StateMutationStore } from './types.js'
 import type { LockOptions } from 'proper-lockfile'
 
@@ -19,20 +20,24 @@ async function delay(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
-async function retryWindowsOperation(operation: () => Promise<void>, operationName: string, attempts = 5): Promise<void> {
-  let lastError: unknown
+async function retryWindowsOperation<T>(operation: () => Promise<T>, operationName: string, attempts = 5): Promise<T> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await operation()
-      return
+      return await operation()
     } catch (error: unknown) {
-      lastError = error
       const code = (error as NodeJS.ErrnoException | null)?.code
       if (process.platform !== 'win32' || !windowsRetryCodes.has(code ?? '') || attempt === attempts - 1) throw error
       await delay(25 * (attempt + 1))
     }
   }
-  throw new Error(`${operationName} failed`, { cause: lastError })
+  throw new Error(`${operationName} failed`)
+}
+
+function filesystemError(error: unknown, operationName: string): Error {
+  const source = error instanceof Error ? error : new Error(String(error))
+  const contextual = new Error(`${operationName} 失败：${source.message}`, { cause: source }) as Error & { code?: string }
+  contextual.code = (source as NodeJS.ErrnoException).code
+  return contextual
 }
 
 /** File-backed CAS store. Cross-process exclusion uses a bounded, stale-recoverable lock. */
@@ -53,16 +58,16 @@ export class FileStateMutationStore implements StateMutationStore {
     await fs.mkdir(dirname(path), { recursive: true })
     let release: () => Promise<void>
     try {
-      release = await this.acquireLock(path, {
-        lockfilePath: lockPath,
-        retries: { retries: Math.max(0, Math.floor(this.lockTimeoutMs / 10)), minTimeout: 10, maxTimeout: 10 },
-        stale: Math.max(2_000, this.lockTimeoutMs * 3),
-        update: Math.max(1_000, this.lockTimeoutMs),
-        realpath: false,
-      })
+      release = await retryWindowsOperation(() => this.acquireLock(path, {
+          lockfilePath: lockPath,
+          retries: { retries: Math.max(0, Math.floor(this.lockTimeoutMs / 10)), minTimeout: 10, maxTimeout: 10 },
+          stale: Math.max(2_000, this.lockTimeoutMs * 3),
+          update: Math.max(1_000, this.lockTimeoutMs),
+          realpath: false,
+        }), `获取锁 ${lockPath}`)
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException | null)?.code === 'ELOCKED') throw new ContractError('LOCK_BUSY', ['mutation lock timeout'])
-      throw error
+      throw filesystemError(error, `${messages.lockAcquireFailed} ${lockPath}；${messages.lockRecovery}`)
     }
     let result: T
     try {
@@ -161,7 +166,8 @@ export class FileStateMutationStore implements StateMutationStore {
         await handle.writeFile(stringify(next, { aliasDuplicateObjects: false }), 'utf8')
         await handle.sync()
       } finally { await handle.close() }
-      await retryWindowsOperation(() => this.replaceFile(temp, path), `replace ${path}`)
+      try { await retryWindowsOperation(() => this.replaceFile(temp, path), `replace ${path}`) }
+      catch (error: unknown) { throw filesystemError(error, `${messages.stateReplaceFailed} ${path}；${messages.stateReplaceRecovery}`) }
       try {
         await retryWindowsOperation(() => fs.unlink(temp), `remove ${temp}`)
       } catch (error: unknown) {

@@ -4,7 +4,7 @@
 
 > 中文说明：本文定义命令行与存储契约。命令名、参数名、状态值和错误码属于稳定接口，必须保持英文；其余说明面向简体中文用户和贡献者。
 
-二进制名称为 `phixlin-flow`，别名为 `phixlin`。CLI 是 Harness 控制面，不启动 Codex、Claude Code 或其他底层 Agent CLI。宿主 Agent 通过入口 Skill 调用 CLI，并按 `status` 的 `next_action` 执行阶段工作；阶段结果必须通过绑定当前 operation 的可验证交接提交。除初始化命令和 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
+二进制名称为 `phixlin-flow`，别名为 `phixlin`。CLI 是 Harness 控制面，不启动 Codex、Claude Code 或其他底层 Agent CLI，也不理解业务需求或 Git 差异。宿主 Agent 通过入口 Skill 调用 CLI，并按 `status` 的 `next_action` 执行阶段工作；阶段结果必须通过绑定当前 operation 的可验证交接提交。除初始化命令和 `start` 外，每个会修改状态的命令都必须提供 `--expected-version` 和 `--expected-action`；`start` 在持有 mutation lock 的情况下创建版本 0。初始开发、重启、修复、需求修订和完成始终使用同一个 `<change-id>`。
 
 | 命令 | 说明 |
 |---|---|
@@ -12,7 +12,7 @@
 | `start <change-id> --workflow <name> --brief <path>` | 校验 Profile 及全部 Skill 资源，冻结快照，创建 change 目录和初始状态。 |
 | `status <change-id> [--json]` | 校验状态并输出阶段、loop、Skill 进度、最近事件、人工介入标记和绑定当前版本的下一命令。 |
 | `resume <change-id>` | 推进控制面并预留下一项 operation，返回 `input` 与待提交的 `operation`；已在执行时重读同一输入，不启动 Agent。 |
-| `submit <change-id> --operation <id> --result-file <path>` | 校验宿主提交包、采集可信证据并推进至下一项 operation 或人工门禁。 |
+| `submit <change-id> --operation <id> --result-file <path>` | 接收宿主的语义结果；Harness 校验提交包和绑定，采集 Git/机器检查等机械证据，并推进至下一项 operation 或人工门禁。 |
 | `retry <change-id>` | 人工解除允许重试的 blocker，恢复其保存位置并重置连续执行失败计数。 |
 | `pause <change-id>` | 停止后续派发并请求中断当前操作；只有收取结果或确认终止后才报告 paused。 |
 | `answer <change-id> --interaction <id> --body-file <path>` | 将回答绑定到当前交互并恢复保存的动作；不会批准阶段。 |
@@ -25,7 +25,7 @@
 
 如果 Profile 缺失、阶段非法、planned Skill 重复、`SKILL.md` 缺失、引用资源缺失或 runtime 不受支持，`start` 会在创建状态前失败。Build 允许 planned Skill 列表为空，并从 `agent-work` 开始。Stage Runner 使用调用前完整状态摘要检测绕过 Store 的控制面改写；拥有工作区写权限的宿主仍可能在流程外修改业务文件，不能据此声称已完成工作流。
 
-`resume` 在下一项宿主 operation 处返回。`status` 的 `operation` 包含当前 `operation_id`、`binding.input_digest` 和动作；`executing` 时 `next_command` 指向 `submit`。宿主把结果写成 UTF-8 JSON 文件，外层必须符合 `schemas/host-envelope-v1.schema.json`，格式为 `{ "schema": "phixlin.host-envelope.v1", "operation_id": "...", "state_version": 1, "input_digest": "...", "result": { "kind": "stage-ready", "summary": "...", "questions": [], "proposal": null, "shape": null, "review": null, "verification": null, "skill_invocations": [] } }`。Shape 的 `result.shape` 应包含 `document`、`acceptance`、`checks`；Reviewer 的 `result.review` 应包含 `verdict`、`report`；Verifier 的 `result.verification` 应包含 `verdict`、`acceptance`。可选 `result.skill_invocations` 记录 `{ "name": "...", "status": "completed", "output": "..." }`，仅作为 `model-reported` contextual Skill；CLI 会在边界把 `output` 写入证据并转换为内部 `artifact`，不代替 planned Skill 或宿主观测。提交前检查 operation、版本和 input digest；失败不允许直接跳过阶段。
+`resume` 在下一项宿主 operation 处返回。`status` 的 `operation` 包含当前 `operation_id`、`binding.input_digest` 和动作；`executing` 时 `next_command` 指向 `submit`，不启动任何 Agent。宿主把结果写成 UTF-8 JSON 文件，外层必须符合 `schemas/host-envelope-v1.schema.json`，格式为 `{ "schema": "phixlin.host-envelope.v1", "operation_id": "...", "state_version": 1, "input_digest": "...", "result": { "kind": "stage-ready", "summary": "...", "questions": [], "proposal": null, "shape": null, "review": null, "verification": null, "skill_invocations": [] } }`。Shape 的 `result.shape` 应包含 `document`、`acceptance`、`checks`；Reviewer 的 `result.review` 应包含 `verdict`、`report`；Verifier 的 `result.verification` 应包含 `verdict`、`acceptance`。可选 `result.skill_invocations` 记录 `{ "name": "...", "status": "completed", "output": "..." }`，仅作为 `model-reported` contextual Skill；CLI 会在边界把 `output` 写入证据并转换为内部 `artifact`，不代替 planned Skill 或宿主观测。提交前检查 operation、版本和 input digest；失败不允许直接跳过阶段。
 
 Shape 的 `acceptance` 至少有一项，每项 `id`、`text`、`verification` 不得为空；`checks` 可为空，但每项命令 `argv` 至少有一个参数。重复的验收/检查标识同样被拒绝。CLI 在写入证据和推进状态前校验这些字段；修正结果后，使用同一 operation 和最新版本重新 `submit`。旧版本若已把非法 Shape 结果写入 `evaluating`，升级后执行 `status` 所示 `resume` 会进入 `blocked`；查看原因后使用 `retry` 派发新的 operation，再提交修正结果。不要手改 `flow-state.yaml` 或其证据工件。
 

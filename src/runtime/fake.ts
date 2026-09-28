@@ -24,6 +24,7 @@ export interface RuntimeInput {
   skillInput?: string
 }
 
+/** 测试用阶段执行端口；生产宿主语义工作不通过此端口进入 CLI。 */
 export interface RuntimeAdapter {
   execute(input: RuntimeInput): Promise<RuntimeResult>
   inspectCandidate?(): Promise<string>
