@@ -2,11 +2,14 @@ import { cp, mkdtemp, mkdir, readFile, readdir, utimes, writeFile } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stringify } from 'yaml'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ContractError, FileEvidenceStore, FileStateMutationStore, digestJson, parseChangeStateYaml } from '../../src/index.js'
 
 describe('file CAS store', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
   it('固定使用 mutation.lock，并忽略 Windows 锁目录清理竞争', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
     await mkdir(join(root, 'change'))
     await cp('fixtures/state/initial.yaml', join(root, 'change/flow-state.yaml'))
@@ -19,6 +22,22 @@ describe('file CAS store', () => {
     await expect(store.mutate('change', { expectedVersion: 0, actionId: 'windows-cleanup', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).resolves.toMatchObject({ replayed: false })
     expect(options?.lockfilePath).toBe(join(root, 'change', 'mutation.lock'))
     expect((await store.read('change')).state_version).toBe(1)
+  })
+
+  it('Windows 锁目录清理竞争持续到 stale 窗口后仍会重试获取', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const root = await mkdtemp(join(tmpdir(), 'phixlin-cas-'))
+    await mkdir(join(root, 'change'))
+    await cp('fixtures/state/initial.yaml', join(root, 'change/flow-state.yaml'))
+    let attempts = 0
+    const acquire = async () => {
+      attempts += 1
+      if (attempts < 7) throw Object.assign(new Error('sharing violation'), { code: 'EPERM' })
+      return async () => undefined
+    }
+    const store = new FileStateMutationStore(root, 100, acquire)
+    await expect(store.mutate('change', { expectedVersion: 0, actionId: 'retry-lock', action: 'reserve-operation', payload: { operation_id: 'op', execution_ref: 'exec' } })).resolves.toMatchObject({ replayed: false })
+    expect(attempts).toBe(7)
   })
 
   it('锁目录拒绝访问时说明位置和安全恢复步骤', async () => {

@@ -16,6 +16,10 @@ type ReplaceFile = (source: string, target: string) => Promise<void>
 
 const windowsRetryCodes = new Set(['EACCES', 'EBUSY', 'EPERM'])
 
+function isWindowsRetryable(error: unknown): boolean {
+  return process.platform === 'win32' && windowsRetryCodes.has((error as NodeJS.ErrnoException | null)?.code ?? '')
+}
+
 async function delay(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
@@ -25,8 +29,7 @@ async function retryWindowsOperation<T>(operation: () => Promise<T>, operationNa
     try {
       return await operation()
     } catch (error: unknown) {
-      const code = (error as NodeJS.ErrnoException | null)?.code
-      if (process.platform !== 'win32' || !windowsRetryCodes.has(code ?? '') || attempt === attempts - 1) throw error
+      if (!isWindowsRetryable(error) || attempt === attempts - 1) throw error
       await delay(25 * (attempt + 1))
     }
   }
@@ -52,6 +55,17 @@ export class FileStateMutationStore implements StateMutationStore {
   private statePath(changeId: string): string { return join(this.root, changeId, 'flow-state.yaml') }
   private lockPath(changeId: string): string { return join(this.root, changeId, 'mutation.lock') }
 
+  private lockRetryAttempts(): number {
+    const stale = Math.max(2_000, this.lockTimeoutMs * 3)
+    let elapsed = 0
+    let attempts = 0
+    while (elapsed < stale) {
+      attempts += 1
+      elapsed += 25 * attempts
+    }
+    return Math.max(5, attempts)
+  }
+
   private async withLock<T>(changeId: string, fn: () => Promise<T>): Promise<T> {
     const path = this.statePath(changeId)
     const lockPath = this.lockPath(changeId)
@@ -64,7 +78,7 @@ export class FileStateMutationStore implements StateMutationStore {
           stale: Math.max(2_000, this.lockTimeoutMs * 3),
           update: Math.max(1_000, this.lockTimeoutMs),
           realpath: false,
-        }), `获取锁 ${lockPath}`)
+        }), `获取锁 ${lockPath}`, this.lockRetryAttempts())
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException | null)?.code === 'ELOCKED') throw new ContractError('LOCK_BUSY', ['mutation lock timeout'])
       throw filesystemError(error, `${messages.lockAcquireFailed} ${lockPath}；${messages.lockRecovery}`)
@@ -77,15 +91,13 @@ export class FileStateMutationStore implements StateMutationStore {
     } catch (error) {
       try { await release() }
       catch (releaseError) {
-        const code = (releaseError as NodeJS.ErrnoException | null)?.code
-        if (!['EACCES', 'EBUSY', 'EPERM'].includes(code ?? '')) throw releaseError
+        if (!isWindowsRetryable(releaseError)) throw releaseError
       }
       throw error
     }
     try { await release() }
     catch (error) {
-      const code = (error as NodeJS.ErrnoException | null)?.code
-      if (!['EACCES', 'EBUSY', 'EPERM'].includes(code ?? '')) throw error
+      if (!isWindowsRetryable(error)) throw error
       // Windows 可能在杀毒扫描或句柄释放窗口内拒绝删除锁目录；保留它让 stale 机制接管，不能覆盖已完成的状态提交。
     }
     return result
@@ -100,7 +112,7 @@ export class FileStateMutationStore implements StateMutationStore {
         await retryWindowsOperation(() => fs.unlink(temporaryPath), `remove ${temporaryPath}`)
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException | null)?.code
-        if (code !== 'ENOENT' && !(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+        if (code !== 'ENOENT' && !isWindowsRetryable(error)) throw error
       }
     }
   }
@@ -117,8 +129,7 @@ export class FileStateMutationStore implements StateMutationStore {
     try {
       await retryWindowsOperation(() => fs.rm(legacyPath, { recursive: true, force: true }), `remove ${legacyPath}`)
     } catch (error: unknown) {
-      const code = (error as NodeJS.ErrnoException | null)?.code
-      if (!(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+      if (!isWindowsRetryable(error)) throw error
     }
   }
 
@@ -172,7 +183,7 @@ export class FileStateMutationStore implements StateMutationStore {
         await retryWindowsOperation(() => fs.unlink(temp), `remove ${temp}`)
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException | null)?.code
-        if (code !== 'ENOENT' && !(process.platform === 'win32' && windowsRetryCodes.has(code ?? ''))) throw error
+        if (code !== 'ENOENT' && !isWindowsRetryable(error)) throw error
       }
       await this.syncParentDirectory(path)
       return { actionId: request.actionId, payloadDigest, previousVersion: state.state_version, stateVersion: next.state_version, replayed: false }

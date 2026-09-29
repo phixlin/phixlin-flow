@@ -25,5 +25,6 @@
 | 0021-shape-result-preflight-and-recovery | Shape 结果预校验与旧状态恢复 | active |
 | 0022-windows-submit-recovery | Windows 提交后的命令启动与状态恢复诊断 | active |
 | 0023-harness-semantic-boundary | Harness 与宿主语义边界 | active |
+| 0024-windows-lock-acquire-retry | Windows 锁获取重试 | active |
 
 决策记录采用三段式：Context（当时的约束）、Decision（选了什么）、Consequences（代价与不做的部分）。已归档的记录冻结不改；新决策新开文件推翻旧决策。
